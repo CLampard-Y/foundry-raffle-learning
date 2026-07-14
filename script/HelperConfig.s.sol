@@ -57,7 +57,7 @@ contract HelperConfig is Script, CodeConstants {
     }
 
     function getSepoliaEthConfig() public returns (NetworkConfig memory) {
-        localNetworkConfig = NetworkConfig({
+        return NetworkConfig({
             entranceFee: ENTRANCE_FEE,
             interval: INTERVAL,
             vrfCoordinator: SEPOLIA_VRF_COORDINATOR,
@@ -81,7 +81,7 @@ contract HelperConfig is Script, CodeConstants {
             new VRFCoordinatorV2_5Mock(MOCK_BASE_FEE, MOCK_GAS_PRICE_LINK, MOCK_WEI_PER_UNIT_LINK);
         vm.stopBroadcast();
 
-        return NetworkConfig({
+        localNetworkConfig = NetworkConfig({
             entranceFee: ENTRANCE_FEE,
             interval: INTERVAL,
             vrfCoordinator: address(vrfCoordinatorMock),
@@ -90,5 +90,7 @@ contract HelperConfig is Script, CodeConstants {
             callbackGasLimit: CALLBACK_GAS_LIMIT,
             subscriptionId: subscriptionID
         });
+
+        return localNetworkConfig;
     }
 }
