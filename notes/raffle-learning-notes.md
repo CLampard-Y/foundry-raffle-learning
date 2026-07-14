@@ -1,4 +1,4 @@
-# Raffle State Machine Notes
+# Raffle LearningNotes
 
 ## Total phases
 A raffle has phases:
@@ -35,3 +35,9 @@ A raffle has phases:
 - The relationship between `rawFulfillRandomWords` and `fulfillRandomWords`:
 - How to represent CEI pattern in `pickWinner`:
 
+## Day 3
+### Concepts
+- Chainlink Automation
+- Deploy script (review)
+- HelperConfig (review)
+- Mocks (review)
