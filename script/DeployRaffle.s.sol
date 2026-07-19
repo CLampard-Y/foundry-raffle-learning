@@ -12,12 +12,15 @@ contract DeployRaffle is Script {
     }
 
     function deployContract() internal returns (Raffle, HelperConfig) {
-        uint256 entranceFee;
-        uint256 interval;
-        address vrfCoordinator;
-        bytes32 gasLane;
-        uint256 subscriptionId;
-        uint32 callbackGasLimit;
+        /**
+         * uint256 entranceFee;
+         * uint256 interval;
+         * address vrfCoordinator;
+         * bytes32 gasLane;
+         * uint256 subscriptionId;
+         * uint32 callbackGasLimit;
+         *
+         */
 
         HelperConfig helperConfig = new HelperConfig();
 

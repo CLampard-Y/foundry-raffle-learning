@@ -16,7 +16,7 @@
 - callbackGasLimit: Unlike the `vrfCoordinator` or `subscriptionId`, `callbackGasLimit` also depends on how much work the consumer callback performs
 
 **Q&A**
-- Why return parameters with `struct` instead of multiple variables: 
+- Why return parameters with `struct` instead of multiple variables: semantic grouping, avoid positional mistakes, keep one consistent configuration per network.It also makes deployment scripts easier to extend and review. 
 ## 3. Sepolia vs Local Anvil
 
 | Event              | Sepolia         | Local Anvil       |

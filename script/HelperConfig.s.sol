@@ -56,7 +56,7 @@ contract HelperConfig is Script, CodeConstants {
         }
     }
 
-    function getSepoliaEthConfig() public returns (NetworkConfig memory) {
+    function getSepoliaEthConfig() public view returns (NetworkConfig memory) {
         return NetworkConfig({
             entranceFee: ENTRANCE_FEE,
             interval: INTERVAL,
@@ -65,8 +65,6 @@ contract HelperConfig is Script, CodeConstants {
             callbackGasLimit: CALLBACK_GAS_LIMIT,
             subscriptionId: subscriptionID
         });
-
-        return localNetworkConfig;
     }
 
     function getOrCreateAnvilEthConfig() public returns (NetworkConfig memory) {
