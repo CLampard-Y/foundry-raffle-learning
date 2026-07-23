@@ -40,27 +40,27 @@ contract RaffleTest is Test {
         );
     }
 
-    function testRaffleInitializesInOpenState() public view {
+    function test_RaffleInOpenState_WhenInitialized() public view {
         assert(raffle.getRaffleState() == Raffle.RaffleState.OPEN);
     }
 
     // ============================================================
     //                    Enter Raffle
     // ============================================================
-    function testRaffleRevertsWhenNotEnoughEthSent() public {
+    function test_enterRaffleReverts_WhenNotEnoughEthSent() public {
         vm.prank(PLAYER);
         vm.expectRevert(Raffle.Raffle__NotEnoughEthSent.selector);
         raffle.enterRaffle();
     }
 
-    function testRaffleRecordsPlayerWhenEnter() public {
+    function test_enterRaffleRecordsPlayer_WhenEnter() public {
         vm.prank(PLAYER);
         raffle.enterRaffle{value: entranceFee}();
         address playerRecorded = raffle.getPlayerByIndex(0);
         assert(playerRecorded == PLAYER);
     }
 
-    function testRaffleEmitsWhenEnter() public {
+    function test_enterRaffleEmits_WhenEnter() public {
         vm.expectEmit(true, false, false, false, address(raffle));
         emit EnteredRaffle(PLAYER);
 
@@ -88,7 +88,6 @@ contract RaffleTest is Test {
      *  3. should not add such setter for test, which will break contract state and security boundary
      * real productive way to test: change state by calling `performUpkeep`
      */
-    /*
     function test_CheckUpkeepReturnsFalse_WhenRaffleIsCalculating() public {
         vm.prank(PLAYER);
         raffle.enterRaffle{value: entranceFee}();
@@ -96,16 +95,11 @@ contract RaffleTest is Test {
 
         raffle.performUpkeep("");
 
-        assertEq(
-            uint256(raffle.getRaffleState()),
-            uint256(Raffle.RaffleState.CALCULATING)
-        );
-
-        (bool upkeepNeeded,) = raffle.checkUpkeep("");
-
-        assertEq(upkeepNeeded, false);
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING));
+        vm.expectRevert(Raffle.Raffle__RaffleNotOpen.selector);
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
     }
-    */
 
     function test_CheckUpkeepReturnsFalse_WhenNoBalance() public {
         vm.prank(PLAYER);
