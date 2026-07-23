@@ -3,6 +3,7 @@
 pragma solidity ^0.8.19;
 
 import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {Raffle} from "../../src/Raffle.sol";
 import {DeployRaffle} from "../../script/DeployRaffle.s.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
@@ -34,18 +35,18 @@ contract RaffleTest is Test {
 
     function setUp() external {
         DeployRaffle deployer = new DeployRaffle();
-        (raffle, helperConfig) = deployer.run();
+        HelperConfig.NetworkConfig memory resolvedConfig;
+        (raffle, helperConfig, resolvedConfig) = deployer.run();
         vm.deal(PLAYER, STARTING_USER_BALANCE);
 
-        HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
         (entranceFee, interval, vrfCoordinator, gasLane, subscriptionId, callbackGasLimit) =
         (
-            config.entranceFee,
-            config.interval,
-            config.vrfCoordinator,
-            config.gasLane,
-            config.subscriptionId,
-            config.callbackGasLimit
+            resolvedConfig.entranceFee,
+            resolvedConfig.interval,
+            resolvedConfig.vrfCoordinator,
+            resolvedConfig.gasLane,
+            resolvedConfig.subscriptionId,
+            resolvedConfig.callbackGasLimit
         );
     }
 
@@ -53,10 +54,7 @@ contract RaffleTest is Test {
     //                    Constructor
     // ============================================================
     function test_RaffleInOpenState_WhenInitialized() public view {
-        assertEq(
-            uint256(raffle.getRaffleState()), 
-            uint256(Raffle.RaffleState.OPEN)
-        );
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
     }
 
     /**
@@ -69,10 +67,7 @@ contract RaffleTest is Test {
     }
 
     function test_ConstructorSetsVrfCoordinator_WhenInitialized() public view {
-        assertEq(
-            address(raffle.s_vrfCoordinator()), 
-            vrfCoordinator
-        );
+        assertEq(address(raffle.s_vrfCoordinator()), vrfCoordinator);
     }
 
     function test_ConstructorReverts_WhenVrfCoordinatorIsZeroAddress() public {
@@ -133,7 +128,7 @@ contract RaffleTest is Test {
      *  3. should not add such setter for test, which will break contract state and security boundary
      * real productive way to test: change state by calling `performUpkeep`
      */
-    function test_CheckUpkeepReturnsFalse_WhenRaffleIsCalculating()  public raffleEnteredAndTimePassed {
+    function test_CheckUpkeepReturnsFalse_WhenRaffleIsCalculating() public raffleEnteredAndTimePassed {
         raffle.performUpkeep("");
         (bool upkeepNeeded,) = raffle.checkUpkeep("");
 
@@ -184,10 +179,7 @@ contract RaffleTest is Test {
     function test_performUpkeepSetsStateToCalculating_WhenUpkeepNeeded() public raffleEnteredAndTimePassed {
         raffle.performUpkeep("");
 
-        assertEq(
-            uint256(raffle.getRaffleState()),
-            uint256(Raffle.RaffleState.CALCULATING)
-        );
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING));
     }
 
     /**
@@ -203,8 +195,8 @@ contract RaffleTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(
                 Raffle.Raffle__UpkeepNotNeeded.selector,
-                entranceFee,  // balance
-                1,  // players length
+                entranceFee, // balance
+                1, // players length
                 uint256(Raffle.RaffleState.OPEN)
             )
         );
@@ -212,5 +204,33 @@ contract RaffleTest is Test {
         raffle.performUpkeep("");
     }
 
-    
+    /**
+     * @dev Test if performUpkeep emits RequestedRaffleWinner event
+     * @dev Not test "how randomness generated, how to secure the randomness", which is tested by Chainlink
+     */
+    function test_performUpkeepEmitsRequestId_WhenUpkeepNeeded() public raffleEnteredAndTimePassed {
+        vm.recordLogs();
+
+        raffle.performUpkeep("");
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 expectedSignature = keccak256("RequestedRaffleWinner(uint256)");
+
+        bool eventFound;
+        uint256 requestId;
+
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (
+                logs[i].emitter == address(raffle) && logs[i].topics.length == 2
+                    && logs[i].topics[0] == expectedSignature
+            ) {
+                requestId = uint256(logs[i].topics[1]);
+                eventFound = true;
+                break;
+            }
+        }
+
+        assertTrue(eventFound, "RequestedRaffleWinner event not found");
+        assertGt(requestId, 0);
+    }
 }
