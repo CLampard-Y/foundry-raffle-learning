@@ -6,6 +6,7 @@ import {Test} from "forge-std/Test.sol";
 import {Raffle} from "../../src/Raffle.sol";
 import {DeployRaffle} from "../../script/DeployRaffle.s.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
+import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
 
 contract RaffleTest is Test {
     Raffle public raffle;
@@ -22,6 +23,14 @@ contract RaffleTest is Test {
     uint256 public constant STARTING_USER_BALANCE = 10 ether;
 
     event EnteredRaffle(address indexed player);
+
+    modifier raffleEnteredAndTimePassed() {
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+
+        vm.warp(block.timestamp + interval);
+        _;
+    }
 
     function setUp() external {
         DeployRaffle deployer = new DeployRaffle();
@@ -40,8 +49,36 @@ contract RaffleTest is Test {
         );
     }
 
+    // ============================================================
+    //                    Constructor
+    // ============================================================
     function test_RaffleInOpenState_WhenInitialized() public view {
-        assert(raffle.getRaffleState() == Raffle.RaffleState.OPEN);
+        assertEq(
+            uint256(raffle.getRaffleState()), 
+            uint256(Raffle.RaffleState.OPEN)
+        );
+    }
+
+    /**
+     * @dev Test if entranceFee is set correctly when initialized
+     * expected = `entranceFee` from `HelperConfig`
+     * actual = `entranceFee` from `Raffle constructor`
+     */
+    function test_ConstructorSetsEntranceFee_WhenInitialized() public view {
+        assertEq(raffle.getEntranceFee(), entranceFee);
+    }
+
+    function test_ConstructorSetsVrfCoordinator_WhenInitialized() public view {
+        assertEq(
+            address(raffle.s_vrfCoordinator()), 
+            vrfCoordinator
+        );
+    }
+
+    function test_ConstructorReverts_WhenVrfCoordinatorIsZeroAddress() public {
+        vm.expectRevert(VRFConsumerBaseV2Plus.ZeroAddress.selector);
+
+        new Raffle(entranceFee, interval, address(0), gasLane, subscriptionId, callbackGasLimit);
     }
 
     // ============================================================
@@ -68,6 +105,14 @@ contract RaffleTest is Test {
         raffle.enterRaffle{value: entranceFee}();
     }
 
+    function test_enterRaffleReverts_WhenRaffleIsCalculating() public raffleEnteredAndTimePassed {
+        raffle.performUpkeep("");
+
+        vm.expectRevert(Raffle.Raffle__RaffleNotOpen.selector);
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+    }
+
     // ============================================================
     //                    CheckUpkeep
     // ============================================================
@@ -88,24 +133,14 @@ contract RaffleTest is Test {
      *  3. should not add such setter for test, which will break contract state and security boundary
      * real productive way to test: change state by calling `performUpkeep`
      */
-    function test_CheckUpkeepReturnsFalse_WhenRaffleIsCalculating() public {
-        vm.prank(PLAYER);
-        raffle.enterRaffle{value: entranceFee}();
-        vm.warp(block.timestamp + interval);
-
+    function test_CheckUpkeepReturnsFalse_WhenRaffleIsCalculating()  public raffleEnteredAndTimePassed {
         raffle.performUpkeep("");
+        (bool upkeepNeeded,) = raffle.checkUpkeep("");
 
-        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING));
-        vm.expectRevert(Raffle.Raffle__RaffleNotOpen.selector);
-        vm.prank(PLAYER);
-        raffle.enterRaffle{value: entranceFee}();
+        assertFalse(upkeepNeeded);
     }
 
-    function test_CheckUpkeepReturnsFalse_WhenNoBalance() public {
-        vm.prank(PLAYER);
-        raffle.enterRaffle{value: entranceFee}();
-        vm.warp(block.timestamp + interval);
-
+    function test_CheckUpkeepReturnsFalse_WhenNoBalance() public raffleEnteredAndTimePassed {
         vm.deal(address(raffle), 0);
         (bool upkeepNeeded,) = raffle.checkUpkeep("");
 
@@ -137,13 +172,45 @@ contract RaffleTest is Test {
         assertFalse(upkeepNeeded);
     }
 
-    function test_CheckUpkeepReturnsTrue_WhenAllConditionsMet() public {
-        vm.prank(PLAYER);
-        raffle.enterRaffle{value: entranceFee}();
-        vm.warp(block.timestamp + interval);
-
+    function test_CheckUpkeepReturnsTrue_WhenAllConditionsMet() public raffleEnteredAndTimePassed {
         (bool upkeepNeeded,) = raffle.checkUpkeep("");
 
         assertTrue(upkeepNeeded);
     }
+
+    // ============================================================
+    //                    PerformUpkeep
+    // ============================================================
+    function test_performUpkeepSetsStateToCalculating_WhenUpkeepNeeded() public raffleEnteredAndTimePassed {
+        raffle.performUpkeep("");
+
+        assertEq(
+            uint256(raffle.getRaffleState()),
+            uint256(Raffle.RaffleState.CALCULATING)
+        );
+    }
+
+    /**
+     * @dev Test if performUpkeep reverts when `upkeepNeeded` is false
+     * @dev By setting `timePassed` not satified to make `upkeepNeeded` false
+     */
+    function test_performUpkeepReverts_WhenUpkeepNotNeeded_IntervalHasNotPassed() public {
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+
+        vm.warp(block.timestamp + interval - 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Raffle.Raffle__UpkeepNotNeeded.selector,
+                entranceFee,  // balance
+                1,  // players length
+                uint256(Raffle.RaffleState.OPEN)
+            )
+        );
+
+        raffle.performUpkeep("");
+    }
+
+    
 }
