@@ -33,7 +33,8 @@ contract CreateSubscription is Script {
 }
 
 contract FundSubscription is Script, CodeConstants {
-    uint256 public constant FUND_AMOUNT = 3 ether; // 3 LINK
+    uint256 public constant LOCAL_FUND_AMOUNT = 100 ether; // 100 LINK
+    uint256 public constant SEPOLIA_FUND_AMOUNT = 3 ether; // 3 LINK
 
     function fundSubscriptionUsingConfig() public {
         HelperConfig helperConfig = new HelperConfig();
@@ -49,11 +50,11 @@ contract FundSubscription is Script, CodeConstants {
 
         if (block.chainid == LOCAL_CHAIN_ID) {
             vm.startBroadcast();
-            VRFCoordinatorV2_5Mock(vrfCoordinator).fundSubscription(subscriptionId, FUND_AMOUNT);
+            VRFCoordinatorV2_5Mock(vrfCoordinator).fundSubscription(subscriptionId, LOCAL_FUND_AMOUNT);
             vm.stopBroadcast();
         } else {
             vm.startBroadcast();
-            LinkToken(linkToken).transferAndCall(vrfCoordinator, FUND_AMOUNT, abi.encode(subscriptionId));
+            LinkToken(linkToken).transferAndCall(vrfCoordinator, SEPOLIA_FUND_AMOUNT, abi.encode(subscriptionId));
             vm.stopBroadcast();
         }
     }

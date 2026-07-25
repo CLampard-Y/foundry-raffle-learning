@@ -60,7 +60,7 @@ contract HelperConfig is Script, CodeConstants {
         }
     }
 
-    function getSepoliaEthConfig() public view returns (NetworkConfig memory) {
+    function getSepoliaEthConfig() public pure returns (NetworkConfig memory) {
         return NetworkConfig({
             entranceFee: ENTRANCE_FEE,
             interval: INTERVAL,

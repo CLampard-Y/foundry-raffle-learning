@@ -8,6 +8,7 @@ import {Raffle} from "../../src/Raffle.sol";
 import {DeployRaffle} from "../../script/DeployRaffle.s.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
+import {VRFCoordinatorV2_5Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol";
 
 contract RaffleTest is Test {
     Raffle public raffle;
@@ -24,6 +25,7 @@ contract RaffleTest is Test {
     uint256 public constant STARTING_USER_BALANCE = 10 ether;
 
     event EnteredRaffle(address indexed player);
+    event PickedWinner(address indexed winner);
 
     modifier raffleEnteredAndTimePassed() {
         vm.prank(PLAYER);
@@ -232,5 +234,165 @@ contract RaffleTest is Test {
 
         assertTrue(eventFound, "RequestedRaffleWinner event not found");
         assertGt(requestId, 0);
+    }
+
+    // ============================================================
+    //                    fulfillRandomWords
+    // ============================================================
+    function test_fulfillRandomWordsReverts_WhenRequestDoesNotExist() public {
+        vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(
+            0,
+            address(raffle)
+        );
+    }
+
+    function test_RawfulfillRandomWordsReverts_WhenCallerIsNotCoordinator() public {
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = 1;
+
+        vm.prank(PLAYER);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                VRFConsumerBaseV2Plus.OnlyCoordinatorCanFulfill.selector,
+                PLAYER,
+                vrfCoordinator
+            )
+        );
+
+        raffle.rawFulfillRandomWords(1, randomWords);
+    }
+
+    function test_fulfillRandomWordsSettlesRaffle_WhenRequestIsValid() public {
+        // -----------------
+        // Arrange
+        // -----------------
+        // Adds players & Sets expected winner
+        address expectedWinner = makeAddr("expectedWinner");
+        address thirdPlayer = makeAddr("thirdPlayer");
+       
+        address[] memory players = new address[](3);
+        players[0] = PLAYER;
+        players[1] = expectedWinner;
+        players[2] = thirdPlayer;
+        uint256 playersNumber = players.length;
+
+        for (uint256 i = 0; i < playersNumber; i++) {
+            vm.deal(players[i], STARTING_USER_BALANCE);
+            vm.prank(players[i]);
+            raffle.enterRaffle{value: entranceFee}();
+        }
+
+        uint256 previousTimeStamp = raffle.getLastTimeStamp();
+
+        // Sets time to pass
+        vm.warp(block.timestamp + interval);
+
+        uint256 requestId = _performUpkeepAndGetRequestId();
+
+        uint256 prize = address(raffle).balance;
+        uint256 winnerBalanceBefore =  expectedWinner.balance;
+
+        // Sets random words
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = 1;
+
+        uint256 expectedFulfillmentTimeStamp = block.timestamp;
+
+        vm.expectEmit(true, false, false, false, address(raffle));
+        emit PickedWinner(expectedWinner);
+
+        // -----------------
+        // Act
+        // -----------------
+        VRFCoordinatorV2_5Mock(vrfCoordinator)
+            .fulfillRandomWordsWithOverride(
+                requestId,
+                address(raffle),
+                randomWords
+            );
+
+        // -----------------
+        // Assert
+        // -----------------
+        // Assert: winner and payout
+        assertEq(raffle.getRecentWinner(), expectedWinner);
+        assertEq(expectedWinner.balance, winnerBalanceBefore + prize);
+
+        // Assert: raffle reset
+        assertEq(address(raffle).balance, 0);
+        assertEq(
+            uint256(raffle.getRaffleState()),
+            uint256(Raffle.RaffleState.OPEN)
+        );
+        assertEq(
+            raffle.getPlayersLength(),
+            0
+        );
+        assertEq(
+            raffle.getLastTimeStamp(),
+            expectedFulfillmentTimeStamp
+        );
+        assertGt(
+            raffle.getLastTimeStamp(),
+            previousTimeStamp
+        );
+    }
+
+    /**
+       address[] memory players = new address[](3);
+       uint256[] memory randomWords = new uint256[](1);
+       uint256 playersLength = 3;
+       players[0] = PLAYER;
+       players[1] = makeAddr("player2");
+       players[2] = makeAddr("player3");
+       randomWords[0] = 1;
+       address memory expectedWinner = players[randomWords[0] % playersLength];
+       for (uint256 i = 0; i < playersLength; i++) {
+           vm.prank(players[i]);
+           raffle.enterRaffle{value: entranceFee}();
+       }
+
+       uint256 requestId = _performUpkeepAndGetRequestId();
+
+       uint256 prize = address(raffle).balance;
+       uint256 winnerBalanceBefore =  expectedWinner.balance;
+
+       raffle.fulfillRandomWordsWithOverride(requestId, randomWords);
+       //raffle.rawFulfillRandomWords(requestId, randomWords);
+
+       assertEq(prize + winnerBalanceBefore, expectedWinner.balance);
+       assertEq(0, address(raffle).balance);
+    }
+    */
+
+
+
+    // ============================================================
+    //                    helper functions
+    // ============================================================
+    /**
+     * @dev Performs upkeep and returns requestId
+     */
+    function _performUpkeepAndGetRequestId() internal returns (uint256) {
+        vm.recordLogs();
+
+        raffle.performUpkeep("");
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 expectedSignature = keccak256("RequestedRaffleWinner(uint256)");
+        uint256 requestId;
+
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (
+                logs[i].emitter == address(raffle) 
+                    && logs[i].topics.length == 2
+                    && logs[i].topics[0] == expectedSignature
+            ) {
+                return uint256(logs[i].topics[1]);
+            }
+        }
+
+        revert("RequestedRaffleWinner event not found");
     }
 }
