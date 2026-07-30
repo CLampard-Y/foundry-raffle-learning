@@ -2,12 +2,15 @@
 cache/
 out/
 
+# Broadcast files
+broadcast/
+
 # Commonly ignored directories
 .logs/
 .ignore/
 
 # Ignores development broadcast logs
-!/broadcast
+/broadcast
 /broadcast/*/31337/
 /broadcast/**/dry-run/
 
@@ -18,3 +21,7 @@ docs/
 .env
 .env.*
 !.env.example
+
+# Ignores development note
+record.md
+improvetest.md
