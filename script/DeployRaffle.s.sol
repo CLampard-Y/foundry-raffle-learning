@@ -26,21 +26,22 @@ contract DeployRaffle is Script {
         returns (Raffle raffle, HelperConfig helperConfig, HelperConfig.NetworkConfig memory resolvedConfig)
     {
         helperConfig = new HelperConfig();
+
         resolvedConfig = helperConfig.getConfig();
+        uint256 deployerPrivateKey = helperConfig.getDeployerKey();
 
         if (resolvedConfig.subscriptionId == 0) {
             CreateSubscription createSubscription = new CreateSubscription();
             (resolvedConfig.subscriptionId, resolvedConfig.vrfCoordinator) =
-                createSubscription.createSubscription(resolvedConfig.vrfCoordinator);
+                createSubscription.createSubscription(resolvedConfig.vrfCoordinator, deployerPrivateKey);
+
+            FundSubscription fundSubscription = new FundSubscription();
+            fundSubscription.fundSubscription(
+                resolvedConfig.vrfCoordinator, resolvedConfig.subscriptionId, resolvedConfig.link, deployerPrivateKey
+            );
         }
 
-        // Fund it
-        FundSubscription fundSubscription = new FundSubscription();
-        fundSubscription.fundSubscription(
-            resolvedConfig.vrfCoordinator, resolvedConfig.subscriptionId, resolvedConfig.link
-        );
-
-        vm.startBroadcast();
+        vm.startBroadcast(deployerPrivateKey);
         raffle = new Raffle(
             resolvedConfig.entranceFee,
             resolvedConfig.interval,
@@ -52,8 +53,10 @@ contract DeployRaffle is Script {
         vm.stopBroadcast();
 
         AddConsumer addConsumer = new AddConsumer();
-        //addConsumer.run();
-        addConsumer.addConsumer(address(raffle), resolvedConfig.vrfCoordinator, resolvedConfig.subscriptionId);
+
+        addConsumer.addConsumer(
+            address(raffle), resolvedConfig.vrfCoordinator, resolvedConfig.subscriptionId, deployerPrivateKey
+        );
 
         return (raffle, helperConfig, resolvedConfig);
     }
