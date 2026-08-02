@@ -12,36 +12,31 @@ contract DeployRaffleTest is Test {
     uint256 private constant LOCAL_CHAIN_ID = 31337;
     address private constant EXPECTED_ANVIL_DEPLOYER = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
 
-    function test_UsesConsistentDeployerIdentity_WhenDeployingLocally() public {
-        // -------------
+    function test_DeploysAndRegistersRaffleWithConsistentIdentity_WhenLocal() public {
         // Arrange
-        // -------------
         vm.skip(block.chainid != LOCAL_CHAIN_ID, "local-only integration test");
 
         DeployRaffle deployer = new DeployRaffle();
 
-        // -------------
         // Act
-        // -------------
         (Raffle deployedRaffle, HelperConfig deploymentHelperConfig, HelperConfig.NetworkConfig memory resolvedConfig) =
             deployer.run();
 
+        // Assert
         uint256 resolvedDeployerPrivateKey = deploymentHelperConfig.getDeployerKey();
         address resolvedDeployer = vm.addr(resolvedDeployerPrivateKey);
-
         uint256 subscriptionId = resolvedConfig.subscriptionId;
-        // Type casting.
+        address raffleOwner = deployedRaffle.owner();
+
+        address[] memory expectedConsumers = new address[](1);
+        expectedConsumers[0] = address(deployedRaffle);
+
         IVRFSubscriptionV2Plus coordinator = IVRFSubscriptionV2Plus(resolvedConfig.vrfCoordinator);
-        (,,, address subscriptionOwner,) = coordinator.getSubscription(subscriptionId);
+        (,,, address subscriptionOwner, address[] memory consumers) = coordinator.getSubscription(subscriptionId);
 
-        // -------------
-        // Assert
-        // -------------
-        assertEq(resolvedDeployer, EXPECTED_ANVIL_DEPLOYER);
-
-        //assertEq(subscriptionOwner,EXPECTED_ANVIL_DEPLOYER);
-        assertEq(subscriptionOwner, resolvedDeployer);
-
-        assertTrue(address(deployedRaffle) != address(0));
+        assertEq(resolvedDeployer, EXPECTED_ANVIL_DEPLOYER, "Unexpected local deployer");
+        assertEq(subscriptionOwner, resolvedDeployer, "Local subscription owner mismatch");
+        assertEq(raffleOwner, resolvedDeployer, "Local raffle owner mismatch");
+        assertEq(consumers, expectedConsumers, "Local consumers of subscription mismatch");
     }
 }
