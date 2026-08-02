@@ -15,10 +15,14 @@ abstract contract CodeConstants {
 
     uint256 public constant ETH_SEPOLIA_CHAIN_ID = 11155111;
     uint256 public constant LOCAL_CHAIN_ID = 31337;
+
+    uint256 public constant DEFAULT_ANVIL_PRIVATE_KEY =
+        0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
 }
 
 contract HelperConfig is Script, CodeConstants {
     error HelperConfig__InvalidChainId();
+    error HelperConfig__InvalidDeployerKey();
 
     struct NetworkConfig {
         uint256 entranceFee;
@@ -50,6 +54,24 @@ contract HelperConfig is Script, CodeConstants {
         return getConfigByChainId(block.chainid);
     }
 
+    function getDeployerKey() public view returns (uint256) {
+        if (block.chainid == LOCAL_CHAIN_ID) {
+            return DEFAULT_ANVIL_PRIVATE_KEY;
+        }
+
+        if (block.chainid == ETH_SEPOLIA_CHAIN_ID) {
+            uint256 deployerPrivateKey = vm.envUint("SEPOLIA_PRIVATE_KEY");
+
+            if (deployerPrivateKey == 0) {
+                revert HelperConfig__InvalidDeployerKey();
+            }
+
+            return deployerPrivateKey;
+        }
+
+        revert HelperConfig__InvalidChainId();
+    }
+
     function getConfigByChainId(uint256 chainId) public returns (NetworkConfig memory) {
         if (networkConfigs[chainId].vrfCoordinator != address(0)) {
             return networkConfigs[chainId];
@@ -79,7 +101,7 @@ contract HelperConfig is Script, CodeConstants {
         }
 
         // Deploy mocks
-        vm.startBroadcast();
+        vm.startBroadcast(getDeployerKey());
         VRFCoordinatorV2_5Mock vrfCoordinatorMock =
             new VRFCoordinatorV2_5Mock(MOCK_BASE_FEE, MOCK_GAS_PRICE_LINK, MOCK_WEI_PER_UNIT_LINK);
         LinkToken linkToken = new LinkToken();
