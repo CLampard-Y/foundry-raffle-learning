@@ -598,6 +598,59 @@ contract RaffleTest is Test {
         assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING));
     }
 
+    function test_WithdrawWinningsPreservesClaim_WhenWinnerRejectsEth() public {
+        // Arrange
+        RejectingWinner rejectingWinner = new RejectingWinner();
+
+        vm.prank(PLAYER);
+        rejectingWinner.enter{value: entranceFee}(raffle);
+
+        assertEq(raffle.getPlayerByIndex(0), address(rejectingWinner));
+        assertEq(raffle.getPlayersLength(), 1);
+
+        // Act
+        uint256 prize = address(raffle).balance;
+
+        vm.warp(block.timestamp + interval);
+
+        uint256 requestId = _performUpkeepAndGetRequestId();
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = 0;
+
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWordsWithOverride(requestId, address(raffle), randomWords);
+
+        vm.prank(address(rejectingWinner));
+        vm.expectRevert(Raffle.Raffle__TransferFailed.selector);
+        raffle.withdrawWinnings();
+
+        // Assert
+        assertEq(raffle.getClaimableWinnings(address(rejectingWinner)), prize);
+        assertEq(raffle.getTotalOutstandingClaims(), prize);
+        assertEq(address(raffle).balance, prize);
+        assertEq(address(rejectingWinner).balance, 0);
+    }
+
+    function test_WithdrawWinningsReverts_WhenCallerHasNoClaim() public {
+        // Arrange
+        assertEq(raffle.getClaimableWinnings(PLAYER), 0);
+
+        uint256 raffleBalanceBefore = address(raffle).balance;
+        uint256 raffleOutstandingClaimsBefore = raffle.getTotalOutstandingClaims();
+        uint256 playerBalanceBefore = PLAYER.balance;
+
+        // Act
+        vm.prank(PLAYER);
+        vm.expectRevert(Raffle.Raffle__NoWinningsToWithdraw.selector);
+        raffle.withdrawWinnings();
+
+        // Assert
+        assertEq(raffle.getClaimableWinnings(PLAYER), 0);
+        assertEq(raffle.getTotalOutstandingClaims(), raffleOutstandingClaimsBefore);
+        assertEq(address(raffle).balance, raffleBalanceBefore);
+
+        assertEq(PLAYER.balance, playerBalanceBefore);
+    }
+
     // ============================================================
     //                    helper functions
     // ============================================================

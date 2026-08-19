@@ -17,8 +17,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
     error Raffle__TransferFailed();
     error Raffle__RaffleNotOpen();
     error Raffle__UpkeepNotNeeded(uint256 balance, uint256 playersLength, uint256 raffleState);
-    error Raffle_NoWinningsToWithdraw();
-    error Raffle_TransferFailed();
+    error Raffle__NoWinningsToWithdraw();
 
     /* Structs Declaration */
     enum RaffleState {
@@ -175,7 +174,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         uint256 amount = s_claimableWinnings[msg.sender];
 
         if (amount == 0) {
-            revert Raffle_NoWinningsToWithdraw();
+            revert Raffle__NoWinningsToWithdraw();
         }
 
         // Effects before interactions
@@ -183,10 +182,10 @@ contract Raffle is VRFConsumerBaseV2Plus {
         s_totalOutstandingClaims -= amount;
 
         // Interactions
-        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        (bool success,) = payable(msg.sender).call{value: amount}("");
 
         if (!success) {
-            revert Raffle_TransferFailed();
+            revert Raffle__TransferFailed();
         }
 
         emit WithdrawnWinnings(msg.sender, amount);
