@@ -17,6 +17,8 @@ contract Raffle is VRFConsumerBaseV2Plus {
     error Raffle__TransferFailed();
     error Raffle__RaffleNotOpen();
     error Raffle__UpkeepNotNeeded(uint256 balance, uint256 playersLength, uint256 raffleState);
+    error Raffle_NoWinningsToWithdraw();
+    error Raffle_TransferFailed();
 
     /* Structs Declaration */
     enum RaffleState {
@@ -38,11 +40,15 @@ contract Raffle is VRFConsumerBaseV2Plus {
     address payable[] private s_players;
     uint256 private s_lastTimeStamp;
     address private s_recentWinner;
+    mapping(address winner => uint256 amount) private s_claimableWinnings;
+    uint256 private s_totalOutstandingClaims;
     RaffleState private s_raffleState;
 
     event EnteredRaffle(address indexed player);
     event RequestedRaffleWinner(uint256 indexed requestId);
     event PickedWinner(address indexed winner);
+    event WinningCredited(address indexed winner, uint256 amount);
+    event WithdrawnWinnings(address indexed winner, uint256 amount);
 
     constructor(
         uint256 entranceFee,
@@ -61,6 +67,9 @@ contract Raffle is VRFConsumerBaseV2Plus {
         i_callbackGasLimit = callbackGasLimit;
 
         s_lastTimeStamp = block.timestamp;
+
+        // Initialize the total outstanding claims to zero.
+        s_totalOutstandingClaims = 0;
     }
 
     function enterRaffle() external payable {
@@ -132,6 +141,11 @@ contract Raffle is VRFConsumerBaseV2Plus {
         emit RequestedRaffleWinner(requestId);
     }
 
+    /**
+     * @dev Only calculates and records winner and prize.
+     * @dev Don't call transfer() in this function
+     * to prevent reentrancy attacks (e.g. rejecting winner).
+     */
     function fulfillRandomWords(
         uint256,
         /*requestId*/
@@ -143,17 +157,39 @@ contract Raffle is VRFConsumerBaseV2Plus {
         // Effects
         uint256 indexOfWinner = randomWords[0] % s_players.length;
         address payable Winner = s_players[indexOfWinner];
+        uint256 prize = address(this).balance - s_totalOutstandingClaims;
+
+        s_claimableWinnings[Winner] += prize;
+        s_totalOutstandingClaims += prize;
+
         s_recentWinner = Winner;
         s_raffleState = RaffleState.OPEN;
-        emit PickedWinner(Winner);
         s_players = new address payable[](0);
         s_lastTimeStamp = block.timestamp;
 
-        // Interactions
-        (bool success,) = Winner.call{value: address(this).balance}("");
-        if (!success) {
-            revert Raffle__TransferFailed();
+        emit PickedWinner(Winner);
+        emit WinningCredited(Winner, prize);
+    }
+
+    function withdrawWinnings() external {
+        uint256 amount = s_claimableWinnings[msg.sender];
+
+        if (amount == 0) {
+            revert Raffle_NoWinningsToWithdraw();
         }
+
+        // Effects before interactions
+        s_claimableWinnings[msg.sender] = 0;
+        s_totalOutstandingClaims -= amount;
+
+        // Interactions
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+
+        if (!success) {
+            revert Raffle_TransferFailed();
+        }
+
+        emit WithdrawnWinnings(msg.sender, amount);
     }
 
     /**
@@ -181,5 +217,13 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
     function getLastTimeStamp() external view returns (uint256) {
         return s_lastTimeStamp;
+    }
+
+    function getClaimableWinnings(address winner) external view returns (uint256) {
+        return s_claimableWinnings[winner];
+    }
+
+    function getTotalOutstandingClaims() external view returns (uint256) {
+        return s_totalOutstandingClaims;
     }
 }
