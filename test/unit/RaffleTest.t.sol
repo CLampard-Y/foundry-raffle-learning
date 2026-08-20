@@ -23,6 +23,49 @@ contract RejectingWinner {
     }
 }
 
+/**
+ * @dev A test-only malicious contract
+ * used to simulate an attack.
+ * @dev Why use contract: An EOA cannot execute code
+ * when receiving ETH.
+ * @param raffle - The raffle being attacked.
+ */
+contract ReentrantWinner {
+    Raffle private immutable i_raffle;
+
+    bool public reentryAttempted;
+    bool public reentrySucceeded;
+    uint256 public receiveCount;
+    uint256 public totalReceived;
+
+    constructor(Raffle raffle) {
+        i_raffle = raffle;
+    }
+
+    function enter() external payable {
+        i_raffle.enterRaffle{value: msg.value}();
+    }
+
+    function withdraw() external {
+        i_raffle.withdrawWinnings();
+    }
+
+    receive() external payable {
+        receiveCount++;
+        totalReceived += msg.value;
+
+        if (!reentryAttempted) {
+            reentryAttempted = true;
+
+            // Catch the nested revert so the legitimate outer
+            // withdrawal can still succeed.
+            (bool success,) = address(i_raffle).call(abi.encodeWithSelector(Raffle.withdrawWinnings.selector));
+
+            reentrySucceeded = success;
+        }
+    }
+}
+
 contract RaffleTest is Test {
     Raffle public raffle;
     HelperConfig public helperConfig;
@@ -39,6 +82,7 @@ contract RaffleTest is Test {
 
     event EnteredRaffle(address indexed player);
     event PickedWinner(address indexed winner);
+    event WithdrawnWinnings(address indexed winner, uint256 amount);
 
     modifier raffleEnteredAndTimePassed() {
         vm.prank(PLAYER);
@@ -649,6 +693,38 @@ contract RaffleTest is Test {
         assertEq(address(raffle).balance, raffleBalanceBefore);
 
         assertEq(PLAYER.balance, playerBalanceBefore);
+    }
+
+    function test_WithdrawWinningsReverts_WhenClaimAlreadyWithdrawn() public raffleEnteredAndTimePassed {
+        // Arrange
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = 0;
+
+        uint256 prize = address(raffle).balance;
+        uint256 requestId = _performUpkeepAndGetRequestId();
+        uint256 playerBalanceBefore = PLAYER.balance;
+
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWordsWithOverride(requestId, address(raffle), randomWords);
+
+        assertEq(raffle.getClaimableWinnings(PLAYER), prize);
+
+        // First withdrawal
+        vm.prank(PLAYER);
+        raffle.withdrawWinnings();
+
+        assertEq(raffle.getClaimableWinnings(PLAYER), 0);
+        assertEq(raffle.getTotalOutstandingClaims(), 0);
+        assertEq(address(raffle).balance, 0);
+        assertEq(PLAYER.balance, prize + playerBalanceBefore);
+
+        // Second withdrawal
+        vm.prank(PLAYER);
+        vm.expectRevert(Raffle.Raffle__NoWinningsToWithdraw.selector);
+        raffle.withdrawWinnings();
+
+        assertEq(raffle.getClaimableWinnings(PLAYER), 0);
+        assertEq(raffle.getTotalOutstandingClaims(), 0);
+        assertEq(address(raffle).balance, 0);
     }
 
     // ============================================================
