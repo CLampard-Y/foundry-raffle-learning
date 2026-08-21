@@ -28,7 +28,6 @@ contract RejectingWinner {
  * used to simulate an attack.
  * @dev Why use contract: An EOA cannot execute code
  * when receiving ETH.
- * @param raffle - The raffle being attacked.
  */
 contract ReentrantWinner {
     Raffle private immutable i_raffle;
@@ -38,6 +37,9 @@ contract ReentrantWinner {
     uint256 public receiveCount;
     uint256 public totalReceived;
 
+    /**
+     * @param raffle - The raffle being attacked.
+     */
     constructor(Raffle raffle) {
         i_raffle = raffle;
     }
@@ -54,14 +56,19 @@ contract ReentrantWinner {
         receiveCount++;
         totalReceived += msg.value;
 
+        // Prevent infinite recursion.
         if (!reentryAttempted) {
             reentryAttempted = true;
 
             // Catch the nested revert so the legitimate outer
             // withdrawal can still succeed.
-            (bool success,) = address(i_raffle).call(abi.encodeWithSelector(Raffle.withdrawWinnings.selector));
-
-            reentrySucceeded = success;
+            // Call `raffle.withdrawWinnings()` would revert
+            // causing original ETH transfer to return false.
+            try i_raffle.withdrawWinnings() {
+                reentrySucceeded = true;
+            } catch {
+                reentrySucceeded = false;
+            }
         }
     }
 }
@@ -725,6 +732,54 @@ contract RaffleTest is Test {
         assertEq(raffle.getClaimableWinnings(PLAYER), 0);
         assertEq(raffle.getTotalOutstandingClaims(), 0);
         assertEq(address(raffle).balance, 0);
+    }
+
+    function test_WithdrawWinningsCannotExtractExtraEth_WhenReentered() public {
+        // Arrange
+        ReentrantWinner attacker = new ReentrantWinner(raffle);
+
+        vm.prank(PLAYER);
+        attacker.enter{value: entranceFee}();
+
+        uint256 prize = address(raffle).balance;
+
+        vm.warp(block.timestamp + interval);
+        uint256 requestId = _performUpkeepAndGetRequestId();
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = 0;
+
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWordsWithOverride(requestId, address(raffle), randomWords);
+
+        assertEq(raffle.getClaimableWinnings(address(attacker)), prize);
+
+        /*
+         * Add surplus ETH after fulfillment.
+         *
+         * This makes the test effective: even if a vulnerable nested
+         * withdrawal tries to take the prize again, the Raffle has enough
+         * balance for that second transfer.
+         */
+        uint256 surplus = prize;
+        vm.deal(address(raffle), prize + surplus);
+
+        // Act
+        attacker.withdraw();
+
+        // Assert
+        assertTrue(attacker.reentryAttempted());
+        assertFalse(attacker.reentrySucceeded());
+
+        // Only the legitimate outer withdrawal succeeded.
+        assertEq(attacker.receiveCount(), 1);
+        assertEq(attacker.totalReceived(), prize);
+        assertEq(address(attacker).balance, prize);
+
+        // Claim accounting was cleared exactly once.
+        assertEq(raffle.getClaimableWinnings(address(attacker)), 0);
+        assertEq(raffle.getTotalOutstandingClaims(), 0);
+
+        // Surplus was not stolen by the nested call.
+        assertEq(address(raffle).balance, surplus);
     }
 
     // ============================================================
