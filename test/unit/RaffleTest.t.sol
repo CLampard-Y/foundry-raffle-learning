@@ -606,23 +606,41 @@ contract RaffleTest is Test {
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(requestId, address(raffle));
     }
 
-    function test_StartsIndependentRound_AfterPreviousRoundSettles() public raffleEnteredAndTimePassed {
+    function test_NewRoundSettles_WhilePreviousWinningsRemainUnclaimed() public raffleEnteredAndTimePassed {
+        // Add extra mock subscription funding to prevent second round from insufficient balance.
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fundSubscription(subscriptionId, 100 ether);
+
         // -----------------
         // First round
         // -----------------
-        uint256 firstRequestId = _performUpkeepAndGetRequestId();
+        uint256 firstRoundPrize = address(raffle).balance - raffle.getTotalOutstandingClaims();
+        uint256 firstPlayerBalance = PLAYER.balance;
+        assertEq(firstRoundPrize, entranceFee);
 
         uint256[] memory randomWords = new uint256[](1);
-        randomWords[0] = 1;
+        randomWords[0] = 0;
 
+        uint256 firstRequestId = _performUpkeepAndGetRequestId();
         VRFCoordinatorV2_5Mock(vrfCoordinator)
             .fulfillRandomWordsWithOverride(firstRequestId, address(raffle), randomWords);
 
         uint256 firstRoundSettledAt = raffle.getLastTimeStamp();
 
+        // User did not withdraw
+        assertEq(raffle.getRecentWinner(), PLAYER);
+        assertEq(raffle.getClaimableWinnings(PLAYER), firstRoundPrize);
+        assertEq(PLAYER.balance, firstPlayerBalance);
+
+        assertEq(raffle.getTotalOutstandingClaims(), firstRoundPrize);
+        assertEq(address(raffle).balance, firstRoundPrize);
+
         // -----------------
         // Second round
         // -----------------
+        // Assert round 2 fully settled.
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
+        assertEq(raffle.getPlayersLength(), 0);
+
         address secondRoundPlayer = makeAddr("secondRoundPlayer");
         vm.deal(secondRoundPlayer, STARTING_USER_BALANCE);
         vm.prank(secondRoundPlayer);
@@ -645,8 +663,22 @@ contract RaffleTest is Test {
         uint256 secondRequestId = _performUpkeepAndGetRequestId();
 
         assertNotEq(secondRequestId, firstRequestId);
-
         assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING));
+
+        uint256 firstClaimBeforeSecondSettlement = raffle.getClaimableWinnings(PLAYER);
+
+        randomWords[0] = 0;
+        VRFCoordinatorV2_5Mock(vrfCoordinator)
+            .fulfillRandomWordsWithOverride(secondRequestId, address(raffle), randomWords);
+
+        // Assert: Round 2 fully settled.
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
+        assertEq(raffle.getPlayersLength(), 0);
+        assertEq(raffle.getRecentWinner(), secondRoundPlayer);
+
+        // Round 1 remains unclaimed.
+        assertEq(raffle.getClaimableWinnings(PLAYER), firstClaimBeforeSecondSettlement);
+        assertGt(raffle.getClaimableWinnings(secondRoundPlayer), 0);
     }
 
     function test_WithdrawWinningsPreservesClaim_WhenWinnerRejectsEth() public {
