@@ -33,6 +33,11 @@ contract RaffleHandler is Test {
         i_interval = interval;
     }
 
+    /**
+     * @dev Creates deterministic actor from fuzz input (actorSeed)
+     * and enters with valid entrance fee.
+     * @param actorSeed - The fuzz input to generate actor.
+     */
     function enter(uint256 actorSeed) external {
         if (raffle.getRaffleState() != Raffle.RaffleState.OPEN) {
             return;
@@ -122,5 +127,38 @@ contract RaffleHandler is Test {
         }
 
         revert("request ID not found");
+    }
+}
+
+contract RaffleInvariantTest is StdInvariant, Test {
+    Raffle public raffle;
+    HelperConfig public helperConfig;
+    RaffleHandler public handler;
+
+    function setUp() external {
+        DeployRaffle deployer = new DeployRaffle();
+        HelperConfig.NetworkConfig memory config;
+
+        (raffle, helperConfig, config) = deployer.run();
+
+        handler = new RaffleHandler(
+            raffle, config.vrfCoordinator, config.subscriptionId, config.entranceFee, config.interval
+        );
+
+        bytes4[] memory selectors = new bytes4[](3);
+
+        selectors[0] = RaffleHandler.enter.selector;
+        selectors[1] = RaffleHandler.settle.selector;
+        selectors[2] = RaffleHandler.withdraw.selector;
+
+        targetContract(address(handler));
+        targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
+    }
+
+    function invariant_TotalOutstandingClaimsNeverExceedBalance() public view {
+        uint256 outstanding = raffle.getTotalOutstandingClaims();
+        uint256 balance = address(raffle).balance;
+
+        assertLe(outstanding, balance);
     }
 }
