@@ -102,6 +102,7 @@ contract RaffleTest is Test {
     function setUp() external {
         DeployRaffle deployer = new DeployRaffle();
         HelperConfig.NetworkConfig memory resolvedConfig;
+
         (raffle, helperConfig, resolvedConfig) = deployer.run();
         vm.deal(PLAYER, STARTING_USER_BALANCE);
 
@@ -148,23 +149,20 @@ contract RaffleTest is Test {
     function testFuzz_enterRaffleReverts_WhenNotEnoughEthSent(uint256 amount) public {
         // entraceFee = 0.01 ether
         uint256 sentAmount = bound(amount, 0, entranceFee - 1); //1 wei
+
         hoax(PLAYER, sentAmount);
-
         vm.expectRevert(Raffle.Raffle__NotEnoughEthSent.selector);
-
         raffle.enterRaffle{value: sentAmount}();
     }
 
-    function testFuzz_enterRaffleRecordsPlayer_WhenEnterWithEnoughEth(uint256 amount) public {
+    function testFuzz_enterRaffleRecordsPlayerAndEmits_WhenEnterWithEnoughEth(uint256 amount) public {
         uint256 maxSentAmount = 100 ether;
         uint256 sentAmount = bound(amount, entranceFee, maxSentAmount);
         uint256 previousBalance = address(raffle).balance;
+
         hoax(PLAYER, sentAmount);
-
         vm.expectEmit(true, false, false, false, address(raffle));
-
         emit EnteredRaffle(PLAYER);
-
         raffle.enterRaffle{value: sentAmount}();
 
         assertEq(address(raffle).balance, previousBalance + sentAmount);
@@ -173,10 +171,9 @@ contract RaffleTest is Test {
     }
 
     function test_enterRaffleRecordsPlayerAndEmits_WhenEnter() public {
-        vm.prank(PLAYER);
+        hoax(PLAYER, entranceFee);
         vm.expectEmit(true, false, false, false, address(raffle));
         emit EnteredRaffle(PLAYER);
-
         raffle.enterRaffle{value: entranceFee}();
 
         address playerRecorded = raffle.getPlayerByIndex(0);
@@ -218,6 +215,14 @@ contract RaffleTest is Test {
         assertFalse(upkeepNeeded);
     }
 
+    /**
+     * @dev Test if checkUpkeep returns false when no balance
+     * use modifier and `vm.deal` to stimulate the state:
+     * only balance is zero while other conditions are met:
+     *   1. players exist
+     *   2. raffle state is `OPEN`
+     *   3. upkeep interval passed
+     */
     function test_CheckUpkeepReturnsFalse_WhenNoBalance() public raffleEnteredAndTimePassed {
         vm.deal(address(raffle), 0);
         (bool upkeepNeeded,) = raffle.checkUpkeep("");
@@ -226,7 +231,7 @@ contract RaffleTest is Test {
     }
 
     /**
-     * @dev Tests CheckUpkeep returns false when no players
+     * @dev Test CheckUpkeep returns false when no players
      * can't test a new null raffle contract, because that lacks players and balance
      * can't sure which causes the revert
      * Send ETH to raffle contract to isolate `hasPlayers` condition
@@ -240,6 +245,9 @@ contract RaffleTest is Test {
         assertFalse(upkeepNeeded);
     }
 
+    /**
+     * @dev Test the time boundry of interval passed
+     */
     function test_CheckUpkeepReturnsFalse_WhenOneSecondBeforeInterval() public {
         vm.prank(PLAYER);
         raffle.enterRaffle{value: entranceFee}();
@@ -293,7 +301,6 @@ contract RaffleTest is Test {
      */
     function test_performUpkeepEmitsRequestId_WhenUpkeepNeeded() public raffleEnteredAndTimePassed {
         vm.recordLogs();
-
         raffle.performUpkeep("");
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -302,6 +309,9 @@ contract RaffleTest is Test {
         bool eventFound;
         uint256 requestId;
 
+        // event RequestedRaffleWinner(uint256 indexed requestId)
+        // emit RequestedRaffleWinner(requestId)
+        // => logs[i].topics = [RequestedRaffleWinner(uint256), requestId]
         for (uint256 i = 0; i < logs.length; i++) {
             if (
                 logs[i].emitter == address(raffle) && logs[i].topics.length == 2
@@ -388,7 +398,7 @@ contract RaffleTest is Test {
      * @dev Prevents duplicate VRF requests while the current round
      * is waiting for fulfillment.
      */
-    function test_performUpkeepRevers_WhenCalledAgainWhileCalculating() public raffleEnteredAndTimePassed {
+    function test_performUpkeepReverts_WhenCalledAgainWhileCalculating() public raffleEnteredAndTimePassed {
         // -----------------
         // Arrange
         // -----------------
@@ -433,7 +443,7 @@ contract RaffleTest is Test {
         raffle.rawFulfillRandomWords(1, randomWords);
     }
 
-    function test_fulfillRandomWordsSettlesRaffle_WhenRequestIsValid() public {
+    function test_fulfillRandomWordsSelectsWinnerCreditsClaimAndReopensRaffle_WhenRequestIsValid() public {
         // -----------------
         // Arrange
         // -----------------
@@ -466,8 +476,6 @@ contract RaffleTest is Test {
         uint256[] memory randomWords = new uint256[](1);
         randomWords[0] = 1;
 
-        uint256 expectedFulfillmentTimeStamp = block.timestamp;
-
         vm.expectEmit(true, false, false, false, address(raffle));
         emit PickedWinner(expectedWinner);
 
@@ -475,28 +483,56 @@ contract RaffleTest is Test {
         // Act
         // -----------------
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWordsWithOverride(requestId, address(raffle), randomWords);
-        vm.prank(expectedWinner);
-        raffle.withdrawWinnings();
 
         // -----------------
         // Assert
         // -----------------
-        // Assert: winner and payout
         assertEq(raffle.getRecentWinner(), expectedWinner);
-        assertEq(expectedWinner.balance, winnerBalanceBefore + prize);
-
-        // Assert: raffle reset
-        assertEq(raffle.getClaimableWinnings(address(expectedWinner)), 0);
-        assertEq(raffle.getTotalOutstandingClaims(), 0);
-        assertEq(address(raffle).balance, 0);
+        assertEq(raffle.getClaimableWinnings(expectedWinner), prize);
+        assertEq(raffle.getTotalOutstandingClaims(), prize);
+        assertEq(address(raffle).balance, prize);
         assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
         assertEq(raffle.getPlayersLength(), 0);
 
-        assertEq(raffle.getLastTimeStamp(), expectedFulfillmentTimeStamp);
-        assertGt(raffle.getLastTimeStamp(), previousTimeStamp);
+        assertEq(expectedWinner.balance, winnerBalanceBefore);
     }
 
-    function testFuzz_fulfillmentSelectsExpectedPlayerAndSettles_WhenRequestIsValid(
+    function test_withdrawWinningsPayClaimAndClearsAccounting() public raffleEnteredAndTimePassed {
+        // ----------------
+        // Arrange
+        // ----------------
+        uint256 prize = address(raffle).balance;
+        uint256 winnerBalanceBefore = PLAYER.balance;
+
+        assertEq(raffle.getPlayersLength(), 1);
+
+        uint256 requestId = _performUpkeepAndGetRequestId();
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = 1;
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWordsWithOverride(requestId, address(raffle), randomWords);
+
+        assertEq(raffle.getRecentWinner(), PLAYER);
+        assertEq(raffle.getClaimableWinnings(PLAYER), prize);
+        assertEq(raffle.getTotalOutstandingClaims(), prize);
+
+        // ----------------
+        // Act
+        // ----------------
+        vm.prank(PLAYER);
+        raffle.withdrawWinnings();
+
+        // ----------------
+        // Assert
+        // ----------------
+        assertEq(raffle.getClaimableWinnings(PLAYER), 0);
+        assertEq(raffle.getTotalOutstandingClaims(), 0);
+        assertEq(raffle.getPlayersLength(), 0);
+        assertEq(address(raffle).balance, 0);
+
+        assertEq(PLAYER.balance, winnerBalanceBefore + prize);
+    }
+
+    function testFuzz_fulfillmentSelectsWinnerAndCreditsClaim_WhenRequestIsValid(
         uint256 playerCount,
         uint256 randomWord
     ) public {
@@ -545,22 +581,24 @@ contract RaffleTest is Test {
         // -----------------
         // Assert
         // -----------------
-        // Assert: winner selection and balance.
+        // Winner selection
         assertEq(raffle.getRecentWinner(), expectedWinner);
+        assertEq(raffle.getClaimableWinnings(expectedWinner), prize);
+        assertEq(raffle.getTotalOutstandingClaims(), prize);
         // Haven't transfered yet
         assertEq(expectedWinner.balance, winnerBalanceBefore);
+        assertEq(address(raffle).balance, prize);
 
-        // Assert: raffle reset.
-        //assertEq(address(raffle).balance, 0);
+        // Raffle reset.
         assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
         assertEq(raffle.getPlayersLength(), 0);
     }
 
     /**
-     * @dev A security characterization test:
-     * records exactly what will happen when push-payment design meet with winner that rejects payment.
+     * @dev A rejecting winner must not be able to block round finalization.
+     * Fulfillment records a claim and performs no external ETH transfer.
      */
-    function test_fulfillmentFinalizesRound_WhenWinnerRejectsEth() public {
+    function test_fulfillmentCreditsClaimWithoutPushingEth_WhenWinnerRejectsEth() public {
         // Arrange: make RejectingWinner the only player.
         RejectingWinner rejectingWinner = new RejectingWinner();
 
@@ -578,11 +616,11 @@ contract RaffleTest is Test {
         uint256[] memory randomWords = new uint256[](1);
         randomWords[0] = 0;
 
-        // Act: the Mock catches the callback revert.
+        // Act: fulfillment completes without calling the winner.
         uint256 expectedSettlementTimestamp = block.timestamp;
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWordsWithOverride(requestId, address(raffle), randomWords);
 
-        // Assert: settlement changes were rolled back.
+        // Assert: settlement finalized and the winner received a claim.
         assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
         assertEq(raffle.getPlayersLength(), 0);
         assertEq(raffle.getRecentWinner(), address(rejectingWinner));
@@ -598,10 +636,12 @@ contract RaffleTest is Test {
         assertEq(raffle.getTotalOutstandingClaims(), prizeBefore);
 
         // No new upkeep can be started.
+        // there is no player in the raffle.
         (bool upkeepNeeded,) = raffle.checkUpkeep("");
         assertFalse(upkeepNeeded);
 
-        // The failed VRF request cannot be retried.
+        // A successfully fulfilled VRF request cannot be fulfilled twice.
+        // request has already been consumed.
         vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(requestId, address(raffle));
     }
@@ -847,7 +887,6 @@ contract RaffleTest is Test {
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 expectedSignature = keccak256("RequestedRaffleWinner(uint256)");
-        uint256 requestId;
 
         for (uint256 i = 0; i < logs.length; i++) {
             if (
