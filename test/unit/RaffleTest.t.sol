@@ -59,11 +59,10 @@ contract ReentrantWinner {
         // Prevent infinite recursion.
         if (!reentryAttempted) {
             reentryAttempted = true;
-
-            // Catch the nested revert so the legitimate outer
-            // withdrawal can still succeed.
-            // Call `raffle.withdrawWinnings()` would revert
-            // causing original ETH transfer to return false.
+            // The nested withdrawal should revert because the claim was
+            // already cleared before the external ETH transfer.
+            // Catching the revert allows the legitimate outer withdrawal
+            // to complete successfully.
             try i_raffle.withdrawWinnings() {
                 reentrySucceeded = true;
             } catch {
@@ -462,11 +461,11 @@ contract RaffleTest is Test {
             raffle.enterRaffle{value: entranceFee}();
         }
 
-        uint256 previousTimeStamp = raffle.getLastTimeStamp();
+        uint256 previousTimestamp = raffle.getLastTimeStamp();
 
         // Sets time to pass
         vm.warp(block.timestamp + interval);
-
+        uint256 expectedFulfillmentTimestamp = block.timestamp;
         uint256 requestId = _performUpkeepAndGetRequestId();
 
         uint256 prize = address(raffle).balance - raffle.getTotalOutstandingClaims();
@@ -487,6 +486,9 @@ contract RaffleTest is Test {
         // -----------------
         // Assert
         // -----------------
+        assertEq(raffle.getLastTimeStamp(), expectedFulfillmentTimestamp);
+        assertGt(raffle.getLastTimeStamp(), previousTimestamp);
+
         assertEq(raffle.getRecentWinner(), expectedWinner);
         assertEq(raffle.getClaimableWinnings(expectedWinner), prize);
         assertEq(raffle.getTotalOutstandingClaims(), prize);
@@ -497,7 +499,7 @@ contract RaffleTest is Test {
         assertEq(expectedWinner.balance, winnerBalanceBefore);
     }
 
-    function test_withdrawWinningsPayClaimAndClearsAccounting() public raffleEnteredAndTimePassed {
+    function test_WithdrawWinningsPaysClaimAndClearsAccounting() public raffleEnteredAndTimePassed {
         // ----------------
         // Arrange
         // ----------------
@@ -585,7 +587,8 @@ contract RaffleTest is Test {
         assertEq(raffle.getRecentWinner(), expectedWinner);
         assertEq(raffle.getClaimableWinnings(expectedWinner), prize);
         assertEq(raffle.getTotalOutstandingClaims(), prize);
-        // Haven't transfered yet
+        // No ETH has been transfered yet;
+        // the winner must withdraw separately.
         assertEq(expectedWinner.balance, winnerBalanceBefore);
         assertEq(address(raffle).balance, prize);
 
@@ -616,7 +619,7 @@ contract RaffleTest is Test {
         uint256[] memory randomWords = new uint256[](1);
         randomWords[0] = 0;
 
-        // Act: fulfillment completes without calling the winner.
+        // Act: fulfillment completes without making an external ETH call to the winner.
         uint256 expectedSettlementTimestamp = block.timestamp;
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWordsWithOverride(requestId, address(raffle), randomWords);
 
@@ -639,9 +642,19 @@ contract RaffleTest is Test {
         // there is no player in the raffle.
         (bool upkeepNeeded,) = raffle.checkUpkeep("");
         assertFalse(upkeepNeeded);
+    }
 
+    function test_fulfillmentConsumesRequest_WhenRequestIsValid() public raffleEnteredAndTimePassed {
+        // Arrange
+        uint256 requestId = _performUpkeepAndGetRequestId();
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = 0;
+
+        // Act
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWordsWithOverride(requestId, address(raffle), randomWords);
+
+        // Assert
         // A successfully fulfilled VRF request cannot be fulfilled twice.
-        // request has already been consumed.
         vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(requestId, address(raffle));
     }
@@ -794,7 +807,7 @@ contract RaffleTest is Test {
         assertEq(PLAYER.balance, playerBalanceBefore);
     }
 
-    function test_WithdrawWinningsReverts_WhenClaimAlreadyWithdrawn() public raffleEnteredAndTimePassed {
+    function test_WithdrawWinningsClearsClaim_WhenCallerHasClaim() public raffleEnteredAndTimePassed {
         // Arrange
         uint256[] memory randomWords = new uint256[](1);
         randomWords[0] = 0;
@@ -807,20 +820,42 @@ contract RaffleTest is Test {
 
         assertEq(raffle.getClaimableWinnings(PLAYER), prize);
 
-        // First withdrawal
+        // Act
         vm.prank(PLAYER);
+        vm.expectEmit(true, false, false, true, address(raffle));
+        emit WithdrawnWinnings(PLAYER, prize);
         raffle.withdrawWinnings();
 
+        // Assert
         assertEq(raffle.getClaimableWinnings(PLAYER), 0);
         assertEq(raffle.getTotalOutstandingClaims(), 0);
         assertEq(address(raffle).balance, 0);
         assertEq(PLAYER.balance, prize + playerBalanceBefore);
+    }
+
+    function test_WithdrawWinningsReverts_WhenClaimAlreadyWithdrawn() public raffleEnteredAndTimePassed {
+        // Arrange
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = 0;
+
+        uint256 prize = address(raffle).balance;
+        uint256 requestId = _performUpkeepAndGetRequestId();
+
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWordsWithOverride(requestId, address(raffle), randomWords);
+
+        assertEq(raffle.getClaimableWinnings(PLAYER), prize);
+
+        // First withdrawal
+        vm.prank(PLAYER);
+        raffle.withdrawWinnings();
+        uint256 playerBalanceAfterFirstWithdrawal = PLAYER.balance;
 
         // Second withdrawal
         vm.prank(PLAYER);
         vm.expectRevert(Raffle.Raffle__NoWinningsToWithdraw.selector);
         raffle.withdrawWinnings();
 
+        assertEq(PLAYER.balance, playerBalanceAfterFirstWithdrawal);
         assertEq(raffle.getClaimableWinnings(PLAYER), 0);
         assertEq(raffle.getTotalOutstandingClaims(), 0);
         assertEq(address(raffle).balance, 0);

@@ -88,3 +88,23 @@ lacks:
 - claimable winnings of winner
 - total outstanding claims
 - raffle balance
+Change name into `testFuzz_fulfillmentSelectsWinnerAndCreditsClaim_WhenRequestIsValid`
+
+## 9.14 ~ 9.15
+#### `test_fulfillmentCreditsClaimWithoutPushingEth_WhenWinnerRejectsEth`
+- Separate VRF request-consumption behavior (`test_fulfillmentConsumesRequest_WhenRequestIsValid`) from the rejecting-winner test.
+
+#### `test_WithdrawWinningsReverts_WhenClaimAlreadyWithdrawn`
+Change name into `test_withdrawWinningReverts_OnDoubleWithdrawal`
+Current test proves both (mix two requirements):
+- 1. the first withdrawal clears the claim -> `test_withdrawWinningsClearsClaim_WhenCallerHasClaim`
+- 2. the second withdrawal reverts -> `test_withdrawWinningsReverts_OnDoubleWithdrawal`
+Added coverage:
+- 1. withdraw event emitted.
+
+## 9.16
+### `script/HelperConfig.s.sol`
+#### Unsupported chain Id test
+#### Local cache configuration test
+
+- 2.
