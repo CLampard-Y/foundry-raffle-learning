@@ -102,9 +102,30 @@ Current test proves both (mix two requirements):
 Added coverage:
 - 1. withdraw event emitted.
 
-## 9.16
+## 9.16 ~ 9.19
 ### `script/HelperConfig.s.sol`
 #### Unsupported chain Id test
-#### Local cache configuration test
 
-- 2.
+#### Local cache configuration test
+QA
+- 1. Which Two return fields prove that mock contracts were not redeployed?
+  > `localNetworkConfig.vrfCoordinator` and `localNetworkConfig.link` (address of `linkToken`)
+- 2. Why both lookups use the same `HelperConfig` instance?
+  > (If create second instance) it would test two independent cashes rather than repeated lookup behavior.
+
+#### Sepolia configuration values
+QA
+- 1. Does this test need to deploy mocks?
+  > No
+- 2. Which fields in `NetworkConfig` are relevent to Sepolia deployment?
+  > `vrfCoordinator`, `gasLane`, `subscriptionId`, `callbackGasLimit`, `link`
+- 3. Where can you obtain the actual values required to verify?
+  > `getConfigByChainId()` returns the actual values.
+- 4. Why should this test call `getConfigByChainId()` directly instead of changing `block.chainid` ?
+  > Changing `block.chainid` directly would change the state of contract and test, which is not desired.
+
+#### Missing Sepolia deployer key
+QA
+- 1. Why using `vm.chainId()` to edit the chain ID?
+  > `getDeployerKey()` read Sepolia deployer key only when chain id is Sepolia.
+- 2. Pay attention to the use of `vm.setEnv()`
