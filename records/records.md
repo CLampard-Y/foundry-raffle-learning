@@ -129,3 +129,16 @@ QA
 - 1. Why using `vm.chainId()` to edit the chain ID?
   > `getDeployerKey()` read Sepolia deployer key only when chain id is Sepolia.
 - 2. Pay attention to the use of `vm.setEnv()`
+
+## 9.20
+Sepolia preflight and small repository-status cleanup
+### Repository status documentation update
+#### `PROJECT_STATUS_AND_ROADMAP.md`
+- Baseline update
+- Invariant changes (stateful verification) update
+- The number of tests update
+
+#### Sepolia subscription verification
+- Sepolia endpoint verified.
+- Coordinator and link address verified.
+- Subscription Id verified.
