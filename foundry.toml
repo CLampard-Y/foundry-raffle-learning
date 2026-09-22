@@ -13,6 +13,10 @@ fs_permissions = [
     { access = "read", path = "./reports" },
 ]
 
+[lint]
+lint_on_build = true
+exclude_lints = ["block-timestamp"]
+
 [fuzz]
 runs = 256
 

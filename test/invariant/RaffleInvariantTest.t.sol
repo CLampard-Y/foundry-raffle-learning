@@ -63,7 +63,7 @@ contract RaffleHandler is Test {
 
         uint256 eligibleTime = raffle.getLastTimeStamp() + i_interval;
 
-        if (block.timestamp < eligibleTime) {
+        if (vm.getBlockTimestamp() < eligibleTime) {
             vm.warp(eligibleTime);
         }
 
