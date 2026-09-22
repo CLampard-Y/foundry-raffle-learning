@@ -13,33 +13,31 @@ An educational and portfolio-oriented Solidity + Foundry raffle based on the Cyf
 
 This repository is intentionally a learning and testnet-oriented project. It is not a production lottery, fundraising protocol, or audited financial application.
 
-Status snapshot: **2026-09-19 (Asia/Shanghai)**. Local verification used source/test baseline `a2655d9` (`test(deploy): add HelperConfig safety coverage`). Documentation edits are separate from that baseline.
-
-| Area | Status | Evidence / boundary |
-| --- | --- | --- |
-| Core Raffle state machine | `IMPLEMENTED / LOCALLY TESTED` | `OPEN -> CALCULATING -> OPEN`, entry, upkeep, VRF request, settlement, and pull-payment withdrawal are implemented. |
-| Payout liveness remediation | `IMPLEMENTED / LOCALLY TESTED` | VRF fulfillment credits winnings instead of pushing ETH to the winner; rejecting receivers cannot block round finalization. |
-| HelperConfig safety tests | `LOCALLY TESTED` | Four tests cover unsupported configuration lookup, cached local mock addresses, exact stored Sepolia parameters, and rejection of a zero Sepolia deployer key. |
-| Stateful invariant | `LOCALLY TESTED` | `totalOutstandingClaims <= address(raffle).balance` across handler-generated operations; 128 runs, depth 64, 8,192 calls, zero reverts in the observed run. |
-| Local test suite | `PASS` | 38 tests: 32 Raffle unit/fuzz tests, 4 HelperConfig tests, 1 local deployment integration test, and 1 invariant. |
-| Formatting and build | `PASS WITH BUILD WARNINGS` | `forge fmt --check` and `forge build --sizes` pass; compiler/lint warnings are noted below. |
-| Public Sepolia deployment | `NOT VERIFIED` | No deployment receipt, transaction hash, deployed address, or successful live round is recorded in this repository. |
-| Chainlink Automation registration | `NOT VERIFIED` | Contract-level `checkUpkeep`/`performUpkeep` logic exists, but no upkeep ID or live execution evidence is recorded. |
-| Security audit / production readiness | `NOT CLAIMED` | No formal audit or production deployment is claimed. |
+| Area                                  | Status                         | Evidence / boundary                                                                                                                                              |
+| ------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core Raffle state machine             | `IMPLEMENTED / LOCALLY TESTED` | `OPEN -> CALCULATING -> OPEN`, entry, upkeep, VRF request, settlement, and pull-payment withdrawal are implemented.                                              |
+| Payout liveness remediation           | `IMPLEMENTED / LOCALLY TESTED` | VRF fulfillment credits winnings instead of pushing ETH to the winner; rejecting receivers cannot block round finalization.                                      |
+| HelperConfig safety tests             | `LOCALLY TESTED`               | Four tests cover unsupported configuration lookup, cached local mock addresses, exact stored Sepolia parameters, and rejection of a zero Sepolia deployer key.   |
+| Stateful invariant                    | `LOCALLY TESTED`               | `totalOutstandingClaims <= address(raffle).balance` across handler-generated operations; 128 runs, depth 64, 8,192 calls, zero reverts in the observed run.      |
+| Local test suite                      | `PASS`                         | 38 tests: 32 Raffle unit/fuzz tests, 4 HelperConfig tests, 1 local deployment integration test, and 1 invariant.                                                 |
+| Formatting and build                  | `PASS`                         | `forge fmt --check` and `forge build --sizes` pass; the `block.timestamp` lint is intentionally excluded for the raffle uses timestamp-based elapsed-time logic. |
+| Public Sepolia deployment             | `NOT VERIFIED`                 | No deployment receipt, transaction hash, deployed address, or successful live round is recorded in this repository.                                              |
+| Chainlink Automation registration     | `NOT VERIFIED`                 | Contract-level `checkUpkeep`/`performUpkeep` logic exists, but no upkeep ID or live execution evidence is recorded.                                              |
+| Security audit / production readiness | `NOT CLAIMED`                  | No formal audit or production deployment is claimed.                                                                                                             |
 
 The [test checklist](TEST_CHECKLIST.md) records the earlier test plan; the implementation and verification results below describe the current evidence. Historical notes and checklist wording do not establish live deployment or security-review status.
 
 ## What This Project Demonstrates
 
-| Area | Demonstrated capability |
-| --- | --- |
-| Solidity state-machine design | Explicit `OPEN` and `CALCULATING` states with guarded transitions |
-| Chainlink VRF integration | VRF v2.5-compatible request configuration, subscription setup, and coordinator-only callback path |
-| Automation integration | Automation-compatible `checkUpkeep` and `performUpkeep` functions with on-chain revalidation |
-| Payout isolation | Pull-payment claims, reserved-prize accounting, checks-effects-interactions withdrawal, and failure-safe claims |
-| Foundry verification | Unit tests, revert assertions, event/log inspection, fuzz tests, integration testing, and stateful invariant testing |
-| Deployment engineering | Configuration regression tests, network-specific broadcaster identity, local subscription setup, and consumer registration |
-| Reproducibility foundations | Git submodules, `foundry.lock`, environment template, and deterministic local Anvil configuration; compiler/toolchain pinning remains pending |
+| Area                          | Demonstrated capability                                                                                                                       |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Solidity state-machine design | Explicit `OPEN` and `CALCULATING` states with guarded transitions                                                                             |
+| Chainlink VRF integration     | VRF v2.5-compatible request configuration, subscription setup, and coordinator-only callback path                                             |
+| Automation integration        | Automation-compatible `checkUpkeep` and `performUpkeep` functions with on-chain revalidation                                                  |
+| Payout isolation              | Pull-payment claims, reserved-prize accounting, checks-effects-interactions withdrawal, and failure-safe claims                               |
+| Foundry verification          | Unit tests, revert assertions, event/log inspection, fuzz tests, integration testing, and stateful invariant testing                          |
+| Deployment engineering        | Configuration regression tests, network-specific broadcaster identity, local subscription setup, and consumer registration                    |
+| Reproducibility foundations   | Git submodules, `foundry.lock`, environment template, and deterministic local Anvil configuration; compiler/toolchain pinning remains pending |
 
 ## Architecture and Lifecycle
 
@@ -86,18 +84,18 @@ This compares the aggregate liability counter with the contract balance. It does
 
 ## Contracts and Scripts
 
-| File | Purpose |
-| --- | --- |
-| [`src/Raffle.sol`](src/Raffle.sol) | Core raffle state machine, VRF request/callback handling, claim accounting, and withdrawals |
-| [`script/DeployRaffle.s.sol`](script/DeployRaffle.s.sol) | Resolves network configuration, creates/funds a local subscription when needed, deploys `Raffle`, and registers it as a VRF consumer |
-| [`script/HelperConfig.s.sol`](script/HelperConfig.s.sol) | Provides Anvil mock configuration and static Sepolia configuration; resolves the network-specific deployer key |
-| [`script/Interactions.s.sol`](script/Interactions.s.sol) | Standalone subscription creation, funding, and consumer-registration scripts |
-| [`test/unit/RaffleTest.t.sol`](test/unit/RaffleTest.t.sol) | Contract unit, negative-path, fuzz, payout, accounting, and reentrancy tests |
-| [`test/unit/HelperConfigTest.t.sol`](test/unit/HelperConfigTest.t.sol) | Configuration lookup, local mock reuse, stored Sepolia parameters, and zero-key rejection tests |
-| [`test/invariant/RaffleInvariantTest.t.sol`](test/invariant/RaffleInvariantTest.t.sol) | Handler-based stateful invariant for outstanding claim liabilities |
-| [`test/integration/DeployRaffleTest.t.sol`](test/integration/DeployRaffleTest.t.sol) | Local deployment ownership, subscription ownership, and consumer-registration integration test |
-| [`test/mocks/LinkToken.sol`](test/mocks/LinkToken.sol) | Local LINK-like token used by the mock setup |
-| [`notes/`](notes/) | Learning and recovery notes; some notes are historical and may contain stale terminology |
+| File                                                                                   | Purpose                                                                                                                              |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| [`src/Raffle.sol`](src/Raffle.sol)                                                     | Core raffle state machine, VRF request/callback handling, claim accounting, and withdrawals                                          |
+| [`script/DeployRaffle.s.sol`](script/DeployRaffle.s.sol)                               | Resolves network configuration, creates/funds a local subscription when needed, deploys `Raffle`, and registers it as a VRF consumer |
+| [`script/HelperConfig.s.sol`](script/HelperConfig.s.sol)                               | Provides Anvil mock configuration and static Sepolia configuration; resolves the network-specific deployer key                       |
+| [`script/Interactions.s.sol`](script/Interactions.s.sol)                               | Standalone subscription creation, funding, and consumer-registration scripts                                                         |
+| [`test/unit/RaffleTest.t.sol`](test/unit/RaffleTest.t.sol)                             | Contract unit, negative-path, fuzz, payout, accounting, and reentrancy tests                                                         |
+| [`test/unit/HelperConfigTest.t.sol`](test/unit/HelperConfigTest.t.sol)                 | Configuration lookup, local mock reuse, stored Sepolia parameters, and zero-key rejection tests                                      |
+| [`test/invariant/RaffleInvariantTest.t.sol`](test/invariant/RaffleInvariantTest.t.sol) | Handler-based stateful invariant for outstanding claim liabilities                                                                   |
+| [`test/integration/DeployRaffleTest.t.sol`](test/integration/DeployRaffleTest.t.sol)   | Local deployment ownership, subscription ownership, and consumer-registration integration test                                       |
+| [`test/mocks/LinkToken.sol`](test/mocks/LinkToken.sol)                                 | Local LINK-like token used by the mock setup                                                                                         |
+| [`notes/`](notes/)                                                                     | Learning and recovery notes; some notes are historical and may contain stale terminology                                             |
 
 ## Repository Layout
 
@@ -126,16 +124,16 @@ This compares the aggregate liability counter with the contract balance. It does
 
 ## Tech Stack and Dependencies
 
-| Component | Version / source |
-| --- | --- |
-| Solidity | Pragma `^0.8.19` |
-| Foundry | `1.7.1` observed on the development server; toolchain is not pinned in-repository |
-| Compiler | Solc `0.8.35` selected in the latest local run; compiler version is not pinned in `foundry.toml` |
-| Chainlink contracts | `contracts-v1.5.0` submodule, pinned by `foundry.lock` |
-| forge-std | `v1.16.2` submodule, pinned by `foundry.lock` |
-| foundry-devops | `0.4.0` submodule, pinned by `foundry.lock` |
-| OpenZeppelin Contracts | `v4.9.6` submodule, pinned by `foundry.lock` |
-| Solmate | Pinned git revision in `foundry.lock` |
+| Component              | Version / source                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| Solidity               | Pragma `^0.8.19`                                                                                 |
+| Foundry                | `1.7.1` observed on the development server; toolchain is not pinned in-repository                |
+| Compiler               | Solc `0.8.35` selected in the latest local run; compiler version is not pinned in `foundry.toml` |
+| Chainlink contracts    | `contracts-v1.5.0` submodule, pinned by `foundry.lock`                                           |
+| forge-std              | `v1.16.2` submodule, pinned by `foundry.lock`                                                    |
+| foundry-devops         | `0.4.0` submodule, pinned by `foundry.lock`                                                      |
+| OpenZeppelin Contracts | `v4.9.6` submodule, pinned by `foundry.lock`                                                     |
+| Solmate                | Pinned git revision in `foundry.lock`                                                            |
 
 The observed compiler/tool versions are evidence for the latest local run, not a reproducibility guarantee. Pin or document the intended toolchain before relying on bytecode or gas comparisons.
 
@@ -284,12 +282,12 @@ Notes / configuration version:
 
 The latest local verification was run on **2026-09-19**, using source/test baseline `a2655d9`, Foundry `1.7.1`, and Solc `0.8.35`:
 
-| Command | Result |
-| --- | --- |
-| `forge fmt --check` | Passed |
-| `forge build --sizes` | Passed; timestamp-comparison lint warnings remain |
-| `forge test -vv` | **38 passed, 0 failed, 0 skipped** |
-| `forge coverage --report summary` | Passed; aggregate 81.75% lines, 80.88% statements, 89.29% branches, 75.00% functions |
+| Command                           | Result                                                                                                    |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `forge fmt --check`               | Passed                                                                                                    |
+| `forge build --sizes`             | Passed; the `block.timestamp` lint is excluded because the raffle uses timestamp-based elapsed-time logic |
+| `forge test -vv`                  | **38 passed, 0 failed, 0 skipped**                                                                        |
+| `forge coverage --report summary` | Passed; aggregate 81.75% lines, 80.88% statements, 89.29% branches, 75.00% functions                      |
 
 Compilation during verification also reported dependency identifier warnings (`EnumerableSet.at`) and the invariant handler's `actorsLength` naming collision. These are not test failures; passing tests do not resolve or replace warning review.
 
@@ -303,13 +301,13 @@ Current test breakdown:
 
 Coverage details:
 
-| Target | Lines | Branches | Boundary |
-| --- | ---: | ---: | --- |
-| `src/Raffle.sol` | 100% | 100% | Execution coverage only; not a security guarantee |
-| `script/DeployRaffle.s.sol` | 100% | 100% | Local integrated path |
-| `script/HelperConfig.s.sol` | 90.32% | 100% | Four configuration tests; no live Sepolia verification |
-| `script/Interactions.s.sol` | 51.06% | 50.00% | Standalone paths are not fully exercised |
-| `test/invariant/RaffleInvariantTest.t.sol` | 92.59% | 87.50% | Handler itself is test code |
+| Target                                     |  Lines | Branches | Boundary                                               |
+| ------------------------------------------ | -----: | -------: | ------------------------------------------------------ |
+| `src/Raffle.sol`                           |   100% |     100% | Execution coverage only; not a security guarantee      |
+| `script/DeployRaffle.s.sol`                |   100% |     100% | Local integrated path                                  |
+| `script/HelperConfig.s.sol`                | 90.32% |     100% | Four configuration tests; no live Sepolia verification |
+| `script/Interactions.s.sol`                | 51.06% |   50.00% | Standalone paths are not fully exercised               |
+| `test/invariant/RaffleInvariantTest.t.sol` | 92.59% |   87.50% | Handler itself is test code                            |
 
 The aggregate includes scripts and test-support contracts. A reported 100% branch metric does not establish exhaustive semantic coverage: for example, HelperConfig's nonzero Sepolia-key return and unsupported-chain key resolution have no dedicated tests. Use the behavior matrix below to interpret the numbers.
 
@@ -317,18 +315,16 @@ The aggregate includes scripts and test-support contracts. A reported 100% branc
 
 Evidence: [`test/unit/HelperConfigTest.t.sol`](test/unit/HelperConfigTest.t.sol).
 
-| Test | Verified behavior | Boundary |
-| --- | --- | --- |
-| `test_GetConfigByChainIdReverts_WhenChainIdUnsupported` | An unsupported lookup reverts with `HelperConfig__InvalidChainId` | Exercises `getConfigByChainId`, not every network-dependent function |
-| `test_ReusesCachedMockAddresses_WhenLocalConfigExists` | Two local lookups on the same instance return identical VRF and LINK addresses | Checks returned identity; does not independently count deployments or validate mock bytecode |
-| `test_SepoliaConfigReturnsExpectedDeploymentParameters` | Constructor-populated mapping resolves the expected coordinator, LINK token, gas lane, callback gas limit, and subscription ID | Expected values are separate test literals; no RPC access or live subscription validation |
-| `test_getDeployerKeyReverts_WhenDeployerKeyInvalid` | On the Sepolia chain ID, an environment value of `"0"` triggers `HelperConfig__InvalidDeployerKey` | Covers zero specifically, not all invalid, absent, or malformed credentials |
+| Test                                                    | Verified behavior                                                                                                              | Boundary                                                                                     |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `test_GetConfigByChainIdReverts_WhenChainIdUnsupported` | An unsupported lookup reverts with `HelperConfig__InvalidChainId`                                                              | Exercises `getConfigByChainId`, not every network-dependent function                         |
+| `test_ReusesCachedMockAddresses_WhenLocalConfigExists`  | Two local lookups on the same instance return identical VRF and LINK addresses                                                 | Checks returned identity; does not independently count deployments or validate mock bytecode |
+| `test_SepoliaConfigReturnsExpectedDeploymentParameters` | Constructor-populated mapping resolves the expected coordinator, LINK token, gas lane, callback gas limit, and subscription ID | Expected values are separate test literals; no RPC access or live subscription validation    |
+| `test_getDeployerKeyReverts_WhenDeployerKeyInvalid`     | On the Sepolia chain ID, an environment value of `"0"` triggers `HelperConfig__InvalidDeployerKey`                             | Covers zero specifically, not all invalid, absent, or malformed credentials                  |
 
 The last test writes a synthetic environment value using `vm.setEnv`. It does not edit `.env` or require a real credential. An absent or malformed value reaches `vm.envUint` before the explicit zero check; the test does not establish the custom error for those cases. The earlier checklist's wording “missing deployer key” is therefore broader than the implemented test.
 
 The Sepolia lookup selects the chain ID using the production constant getter. It checks the returned parameter values but does not independently guard against an accidental change to that chain-ID constant. Neither the Sepolia entrance fee nor the interval has an exact-value assertion in this configuration test.
-
-> 中文：新增四个测试验证的是本地配置行为；Sepolia 参数与期望值一致，不代表链上配置已验证。密钥测试只覆盖值为零，不能写成已覆盖“缺失或所有非法密钥”。
 
 ### Behaviors exercised by the suite
 
@@ -401,16 +397,16 @@ This repository must not be used to custody real funds without a new threat mode
 
 Use this table as a completion framework. Change a status only when the listed evidence exists; empty deployment-record fields above are intentional.
 
-| Work item | Current status | Evidence needed to close |
-| --- | --- | --- |
-| Pull-payment and cross-round regression tests | Locally tested | Current Raffle suite and bounded invariant pass; security review remains separate |
-| Initial HelperConfig test set | Locally tested | Four tests pass, within the behavior matrix's stated limits |
-| Reproducible toolchain | Pending | Explicit Foundry/Solc/settings baseline used in both local verification and CI |
-| Additional verification | Proposed | Risk-selected tests from the gaps above, with assertions and reproducible results |
-| Sepolia preflight | Pending | Dated official configuration checks and onchain subscription/owner/funding checks |
-| Sepolia deployment and Automation round | Not verified | Completed deployment record, including fulfillment and withdrawal receipts |
-| Independent security review | Not performed in this documentation update | Reviewed commit, threat model, findings, remediation tests, and residual-risk record |
-| Operational procedure | Pending before public operation | Owner/coordinator policy, funding and stalled-request monitoring, response contacts, and incident procedure reflecting the lack of onchain recovery |
+| Work item                                     | Current status                             | Evidence needed to close                                                                                                                            |
+| --------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pull-payment and cross-round regression tests | Locally tested                             | Current Raffle suite and bounded invariant pass; security review remains separate                                                                   |
+| Initial HelperConfig test set                 | Locally tested                             | Four tests pass, within the behavior matrix's stated limits                                                                                         |
+| Reproducible toolchain                        | Pending                                    | Explicit Foundry/Solc/settings baseline used in both local verification and CI                                                                      |
+| Additional verification                       | Proposed                                   | Risk-selected tests from the gaps above, with assertions and reproducible results                                                                   |
+| Sepolia preflight                             | Pending                                    | Dated official configuration checks and onchain subscription/owner/funding checks                                                                   |
+| Sepolia deployment and Automation round       | Not verified                               | Completed deployment record, including fulfillment and withdrawal receipts                                                                          |
+| Independent security review                   | Not performed in this documentation update | Reviewed commit, threat model, findings, remediation tests, and residual-risk record                                                                |
+| Operational procedure                         | Pending before public operation            | Owner/coordinator policy, funding and stalled-request monitoring, response contacts, and incident procedure reflecting the lack of onchain recovery |
 
 Recommended next milestone: complete Sepolia preflight and record a non-broadcast simulation before any public-network deployment. Keep testnet validation separate from authorization to operate with real funds.
 
