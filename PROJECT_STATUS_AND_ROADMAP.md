@@ -2,14 +2,14 @@
 
 ## 1. Document control
 
-| Field                          | Current value                                                                              |
-| ------------------------------ | ------------------------------------------------------------------------------------------ |
-| Current Git tip                | `bcbbe3b` — `docs: document project status and verification evidence`                      |
-| Source/test evidence baseline  | `a2655d9` — `test(deploy): add HelperConfig safety coverage`                               |
-| Latest local verification date | 2026-09-19                                                                                 |
-| Current phase                  | Local verification complete; repository closure and pre-fork preparation                   |
-| Next highest-value work        | Refresh repository evidence, then Sepolia read-only preflight and optional fork validation |
-| Intended scope                 | Educational and portfolio-oriented testnet project; not a production lottery               |
+| Field                                  | Current value                                                                                         |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Repository state at evidence capture   | `0b7f12c` — `docs: add deployment readiness checklist`                                                |
+| Source/test evidence baseline          | `7063450` — `chore: configure linting and fix invariant time handling`                                 |
+| Latest local verification date         | 2026-09-22                                                                                            |
+| Current phase                          | Gate 1 complete; ready for Sepolia read-only preflight                                                |
+| Next highest-value work                | Execute Gate 2 read-only preflight, then inspect a non-broadcast deployment simulation                 |
+| Intended scope                         | Educational and portfolio-oriented testnet project; not a production lottery                        |
 
 This document uses the following evidence states:
 
@@ -64,16 +64,18 @@ The project is a locally verified Foundry raffle implementation with pull-paymen
 
 ### Current local evidence
 
-The recorded 2026-09-19 verification used Foundry `1.7.1` and Solc `0.8.35`:
+The recorded 2026-09-22 verification used Foundry `1.7.1` and Solc `0.8.35`:
 
 | Command                           | Result                                                                               |
 | --------------------------------- | ------------------------------------------------------------------------------------ |
 | `forge fmt --check`               | Passed                                                                               |
-| `forge build --sizes`             | Passed; the `block.timestamp` lint is exluded                                        |
+| `forge build --sizes`             | Passed; the `block.timestamp` lint is intentionally excluded because the raffle uses timestamp-based elapsed-time logic |
 | `forge test -vv`                  | 38 passed, 0 failed, 0 skipped                                                       |
-| `forge coverage --report summary` | Passed; aggregate 81.75% lines, 80.88% statements, 89.29% branches, 75.00% functions |
+| `forge coverage --report summary` | Passed; aggregate 81.75% lines, 80.95% statements, 89.29% branches, 75.00% functions |
 
 Coverage is diagnostic evidence, not a correctness or security certificate. Reported `Raffle.sol` execution coverage is 100% in the recorded run.
+
+The normal build excludes the intentional `block-timestamp` lint. A forced recompilation still reports the dependency `EnumerableSet.at` identifier warning and the invariant handler's `actorsLength` naming collision; these are reviewed compiler warnings, not test failures.
 
 ## 4. Historical development stages
 
@@ -98,11 +100,11 @@ This table summarizes repository history; it does not claim anything that was on
 
 Before using a public network:
 
-- [ ] Update all status documents to the current Git tip and source/test baseline.
-- [ ] Re-run and record `forge fmt --check`, `forge build --sizes`, `forge test -vv`, and `forge coverage --report summary`.
-- [ ] Review remaining compiler/lint warnings and explicitly accept or resolve them.
-- [ ] Record the residual security findings listed in Section 7.
-- [ ] Review documentation changes and establish a clean, reviewable commit boundary.
+- [x] Update all status documents to the current repository/evidence baseline.
+- [x] Re-run and record `forge fmt --check`, `forge build --sizes`, `forge test -vv`, and `forge coverage --report summary`.
+- [x] Review remaining compiler/lint warnings and explicitly accept or resolve them.
+- [x] Record the residual security findings listed in Section 7.
+- [x] Review documentation changes and establish a clean, reviewable commit boundary.
 
 Primary checklist: [`PENDING_WORK_CHECKLIST.md`](records/PENDING_WORK_CHECKLIST.md).
 
@@ -181,7 +183,7 @@ A fork cannot prove live VRF nodes, billing latency, Automation monitoring, Auto
 ### Documentation closure criteria
 
 - [ ] Link both documents from `README.md`.
-- [ ] Update this roadmap, the README deployment record, and [`PENDING_WORK_CHECKLIST.md`](../PENDING_WORK_CHECKLIST.md).
+- [ ] Update this roadmap, the README deployment record, and [`PENDING_WORK_CHECKLIST.md`](records/PENDING_WORK_CHECKLIST.md).
 - [ ] Preserve no private key, `.env`, or sensitive RPC/broadcast material.
 
 ## 7. Risk and unknown register
@@ -211,18 +213,18 @@ A successful fork or testnet run does not establish production readiness or secu
 
 ## 9. Evidence index
 
-- Core contract: [`src/Raffle.sol`](../src/Raffle.sol)
-- Deployment orchestration: [`script/DeployRaffle.s.sol`](../script/DeployRaffle.s.sol)
-- Network configuration: [`script/HelperConfig.s.sol`](../script/HelperConfig.s.sol)
-- Interaction scripts: [`script/Interactions.s.sol`](../script/Interactions.s.sol)
-- Raffle tests: [`test/unit/RaffleTest.t.sol`](../test/unit/RaffleTest.t.sol)
-- HelperConfig tests: [`test/unit/HelperConfigTest.t.sol`](../test/unit/HelperConfigTest.t.sol)
-- Deployment integration test: [`test/integration/DeployRaffleTest.t.sol`](../test/integration/DeployRaffleTest.t.sol)
-- Stateful invariant: [`test/invariant/RaffleInvariantTest.t.sol`](../test/invariant/RaffleInvariantTest.t.sol)
-- Test checklist: [`TEST_CHECKLIST.md`](../TEST_CHECKLIST.md)
-- Pending work checklist: [`PENDING_WORK_CHECKLIST.md`](../PENDING_WORK_CHECKLIST.md)
-- Main documentation: [`README.md`](../README.md)
-- CI workflow: [`../.github/workflows/test.yml`](../.github/workflows/test.yml)
+- Core contract: [`src/Raffle.sol`](src/Raffle.sol)
+- Deployment orchestration: [`script/DeployRaffle.s.sol`](script/DeployRaffle.s.sol)
+- Network configuration: [`script/HelperConfig.s.sol`](script/HelperConfig.s.sol)
+- Interaction scripts: [`script/Interactions.s.sol`](script/Interactions.s.sol)
+- Raffle tests: [`test/unit/RaffleTest.t.sol`](test/unit/RaffleTest.t.sol)
+- HelperConfig tests: [`test/unit/HelperConfigTest.t.sol`](test/unit/HelperConfigTest.t.sol)
+- Deployment integration test: [`test/integration/DeployRaffleTest.t.sol`](test/integration/DeployRaffleTest.t.sol)
+- Stateful invariant: [`test/invariant/RaffleInvariantTest.t.sol`](test/invariant/RaffleInvariantTest.t.sol)
+- Test checklist: [`TEST_CHECKLIST.md`](TEST_CHECKLIST.md)
+- Pending work checklist: [`PENDING_WORK_CHECKLIST.md`](records/PENDING_WORK_CHECKLIST.md)
+- Main documentation: [`README.md`](README.md)
+- CI workflow: [`.github/workflows/test.yml`](.github/workflows/test.yml)
 
 `TESTING.md` and `SECURITY_NOTES.md` are not yet present and remain final documentation tasks.
 

@@ -20,7 +20,7 @@ This repository is intentionally a learning and testnet-oriented project. It is 
 | HelperConfig safety tests             | `LOCALLY TESTED`               | Four tests cover unsupported configuration lookup, cached local mock addresses, exact stored Sepolia parameters, and rejection of a zero Sepolia deployer key.   |
 | Stateful invariant                    | `LOCALLY TESTED`               | `totalOutstandingClaims <= address(raffle).balance` across handler-generated operations; 128 runs, depth 64, 8,192 calls, zero reverts in the observed run.      |
 | Local test suite                      | `PASS`                         | 38 tests: 32 Raffle unit/fuzz tests, 4 HelperConfig tests, 1 local deployment integration test, and 1 invariant.                                                 |
-| Formatting and build                  | `PASS`                         | `forge fmt --check` and `forge build --sizes` pass; the `block.timestamp` lint is intentionally excluded for the raffle uses timestamp-based elapsed-time logic. |
+| Formatting and build                  | `PASS WITH COMPILER WARNINGS`  | `forge fmt --check` and `forge build --sizes` pass; the `block.timestamp` lint is intentionally excluded because the raffle uses timestamp-based elapsed-time logic. |
 | Public Sepolia deployment             | `NOT VERIFIED`                 | No deployment receipt, transaction hash, deployed address, or successful live round is recorded in this repository.                                              |
 | Chainlink Automation registration     | `NOT VERIFIED`                 | Contract-level `checkUpkeep`/`performUpkeep` logic exists, but no upkeep ID or live execution evidence is recorded.                                              |
 | Security audit / production readiness | `NOT CLAIMED`                  | No formal audit or production deployment is claimed.                                                                                                             |
@@ -280,14 +280,14 @@ Notes / configuration version:
 
 ### Current local snapshot
 
-The latest local verification was run on **2026-09-19**, using source/test baseline `a2655d9`, Foundry `1.7.1`, and Solc `0.8.35`:
+The latest local verification was run on **2026-09-22**, using source/test baseline `7063450`, Foundry `1.7.1`, and Solc `0.8.35`:
 
 | Command                           | Result                                                                                                    |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `forge fmt --check`               | Passed                                                                                                    |
 | `forge build --sizes`             | Passed; the `block.timestamp` lint is excluded because the raffle uses timestamp-based elapsed-time logic |
 | `forge test -vv`                  | **38 passed, 0 failed, 0 skipped**                                                                        |
-| `forge coverage --report summary` | Passed; aggregate 81.75% lines, 80.88% statements, 89.29% branches, 75.00% functions                      |
+| `forge coverage --report summary` | Passed; aggregate 81.75% lines, 80.95% statements, 89.29% branches, 75.00% functions                      |
 
 Compilation during verification also reported dependency identifier warnings (`EnumerableSet.at`) and the invariant handler's `actorsLength` naming collision. These are not test failures; passing tests do not resolve or replace warning review.
 

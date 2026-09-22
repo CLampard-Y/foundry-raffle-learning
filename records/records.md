@@ -138,7 +138,13 @@ Sepolia preflight and small repository-status cleanup
 - Invariant changes (stateful verification) update
 - The number of tests update
 
-#### Sepolia subscription verification
-- Sepolia endpoint verified.
-- Coordinator and link address verified.
-- Subscription Id verified.
+#### Sepolia configuration preflight
+##### Step 1: configure the RPC endpoint
+```solidity
+// In your local shell.
+export SEPOLIA_RPC_URL='https://your-sepolia-rpc-endpoint'
+
+// Run the first read-only check.
+// Expected output: 11155111
+/home/ZKdev/.foundry/bin/cast chain-id --rpc-url "$SEPOLIA_RPC_URL"
+```

@@ -52,7 +52,7 @@ Complete this gate before using a public network.
   - coordinator migration is an owner/coordinator trust assumption;
   - a permanently rejecting winner cannot withdraw its individual claim;
   - callback behavior relies on the configured coordinator and does not locally validate `requestId`.
-- [ ] Establish a clean, reviewable commit boundary.
+- [x] Establish a clean, reviewable commit boundary.
 
 **Gate 1 evidence:** current commit reference, passing local commands, updated status document, and documented residual risks.
 
@@ -184,7 +184,7 @@ These documents close the project as a well-documented educational/testnet repos
 ### Documentation closure
 
 - [ ] Link `TESTING.md` and `SECURITY_NOTES.md` from `README.md`.
-- [ ] Update [`records/PROJECT_STATUS_AND_ROADMAP.md`](records/PROJECT_STATUS_AND_ROADMAP.md) and the deployment record with the final evidence level (A, B, or C).
+- [ ] Update [`PROJECT_STATUS_AND_ROADMAP.md`](../PROJECT_STATUS_AND_ROADMAP.md) and the deployment record with the final evidence level (A, B, or C).
 - [ ] Ensure no secret, private key, or sensitive RPC material is committed.
 
 **Gate 6 evidence:** both documents are internally consistent with the code, tests, README, and recorded deployment/fork evidence.
