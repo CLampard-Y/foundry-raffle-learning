@@ -2,14 +2,15 @@
 
 ## 1. Document control
 
-| Field                                  | Current value                                                                                         |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Repository state at evidence capture   | `0b7f12c` — `docs: add deployment readiness checklist`                                                |
-| Source/test evidence baseline          | `7063450` — `chore: configure linting and fix invariant time handling`                                 |
-| Latest local verification date         | 2026-09-22                                                                                            |
-| Current phase                          | Gate 1 complete; ready for Sepolia read-only preflight                                                |
-| Next highest-value work                | Execute Gate 2 read-only preflight, then inspect a non-broadcast deployment simulation                 |
-| Intended scope                         | Educational and portfolio-oriented testnet project; not a production lottery                        |
+| Field                                | Current value                                                                          |
+| ------------------------------------ | -------------------------------------------------------------------------------------- |
+| Repository state at evidence capture | `e2d71c5` — `docs: update verification status and preflight guidance`                 |
+| Source/test evidence baseline        | `7063450` — `chore: configure linting and fix invariant time handling`                 |
+| Latest local verification date       | 2026-09-22                                                                             |
+| Latest Sepolia read-only check       | 2026-09-26 17:21 UTC; block `11787627`                                                 |
+| Current phase                        | Gate 2 read-only preflight complete; Gate 3 simulation pending                         |
+| Next highest-value work              | Run and inspect the non-broadcast deployment simulation                                |
+| Intended scope                       | Educational and portfolio-oriented testnet project; not a production lottery           |
 
 This document uses the following evidence states:
 
@@ -24,7 +25,7 @@ Passing tests do not automatically establish security, live-service availability
 
 ## 2. Executive status
 
-The project is a locally verified Foundry raffle implementation with pull-payment settlement, stateful accounting tests, and local deployment integration. It is ready to begin repository cleanup and read-only Sepolia preflight. It has not yet been fork-tested, fork-deployed, deployed to Sepolia, or exercised through live VRF and Automation services.
+The project is a locally verified Foundry raffle implementation with pull-payment settlement, stateful accounting tests, and local deployment integration. Sepolia read-only preflight is complete; the next gate is a non-broadcast deployment simulation. It has not yet been fork-tested, fork-deployed, deployed to Sepolia, or exercised through live VRF and Automation services.
 
 | Area                                   | Evidence state                            | Status             | Current boundary                                                                                                                                  |
 | -------------------------------------- | ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -36,7 +37,7 @@ The project is a locally verified Foundry raffle implementation with pull-paymen
 | HelperConfig tests                     | VERIFIED / LOCALLY TESTED                 | COMPLETE           | Four tests cover unsupported lookup, local cache reuse, stored Sepolia values, and a zero deployer key.                                           |
 | Local deployment integration           | VERIFIED / LOCALLY TESTED                 | COMPLETE           | Local mocks, subscription creation/funding, Raffle deployment, ownership, and consumer registration are tested.                                   |
 | Local acceptance suite                 | VERIFIED                                  | COMPLETE           | 38 tests pass; build and formatting pass in the recorded verification run.                                                                        |
-| Sepolia configuration                  | LOCALLY TESTED; external state UNVERIFIED | PRE-FLIGHT PENDING | Static values are tested locally; coordinator code, subscription state, ownership, funding, and current service support still require RPC checks. |
+| Sepolia configuration                  | LOCALLY TESTED; RPC CHECKED               | PREFLIGHT COMPLETE | Coordinator/LINK code and subscription state were checked at Sepolia block `11787627`; live VRF/Automation remain unverified.                    |
 | Fork test/deployment                   | UNVERIFIED                                | OPTIONAL NEXT      | A pinned fork can validate snapshot compatibility and deployment orchestration, but not live VRF or Automation.                                   |
 | Sepolia deployment                     | UNVERIFIED                                | PLANNED            | No public deployment receipt, address, or transaction evidence is recorded.                                                                       |
 | Automation registration/live execution | UNVERIFIED                                | PLANNED            | No upkeep ID or live execution evidence is recorded.                                                                                              |
@@ -61,17 +62,18 @@ The project is a locally verified Foundry raffle implementation with pull-paymen
 - The network-specific deployer key is passed consistently through local subscription setup, Raffle deployment, and consumer registration.
 - The local integration test verifies deployer identity, subscription ownership, Raffle ownership, and consumer registration.
 - The Sepolia configuration tests verify stored values only; they do not query Sepolia.
+- Separate read-only RPC checks confirmed the configured coordinator/LINK code, subscription owner, 18 LINK balance, and two historical consumers. [Gate 2 evidence and reuse decision](records/records.md#step5minimum-acceptable-stage-verify-existing-consumer-of-the-subscription) record the pending-request caveat.
 
 ### Current local evidence
 
 The recorded 2026-09-22 verification used Foundry `1.7.1` and Solc `0.8.35`:
 
-| Command                           | Result                                                                               |
-| --------------------------------- | ------------------------------------------------------------------------------------ |
-| `forge fmt --check`               | Passed                                                                               |
+| Command                           | Result                                                                                                                  |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `forge fmt --check`               | Passed                                                                                                                  |
 | `forge build --sizes`             | Passed; the `block.timestamp` lint is intentionally excluded because the raffle uses timestamp-based elapsed-time logic |
-| `forge test -vv`                  | 38 passed, 0 failed, 0 skipped                                                       |
-| `forge coverage --report summary` | Passed; aggregate 81.75% lines, 80.95% statements, 89.29% branches, 75.00% functions |
+| `forge test -vv`                  | 38 passed, 0 failed, 0 skipped                                                                                          |
+| `forge coverage --report summary` | Passed; aggregate 81.75% lines, 80.95% statements, 89.29% branches, 75.00% functions                                    |
 
 Coverage is diagnostic evidence, not a correctness or security certificate. Reported `Raffle.sol` execution coverage is 100% in the recorded run.
 
@@ -85,13 +87,13 @@ This table summarizes repository history; it does not claim anything that was on
 | -------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------- |
 | Project foundation and CI                          | Foundry project, dependencies, and CI workflow                                            | COMPLETE                                |
 | Core Raffle, VRF, and Automation-compatible upkeep | State machine, request/callback flow, and upkeep checks                                   | COMPLETE                                |
-| Portable configuration                             | `HelperConfig`, local mocks, and Sepolia constants                                        | COMPLETE locally; live state unverified |
+| Portable configuration                             | `HelperConfig`, local mocks, and Sepolia constants                                        | COMPLETE locally; Sepolia read-only checked |
 | Subscription/deployment flow                       | Creation, funding, deployment, and consumer registration                                  | COMPLETE locally                        |
 | Failure characterization                           | Rejecting-winner callback failure identified and reproduced                               | COMPLETE                                |
 | Pull-payment remediation                           | Callback no longer pushes ETH to the winner                                               | COMPLETE and locally tested             |
 | Withdrawal and accounting verification             | Withdrawal failure, duplicate withdrawal, reentrancy, multi-round reserves, and invariant | COMPLETE and locally tested             |
 | HelperConfig safety coverage                       | Four focused configuration tests                                                          | COMPLETE and locally tested             |
-| Public-network validation                          | Fork and Sepolia evidence                                                                 | NOT STARTED                             |
+| Public-network validation                          | Sepolia read-only preflight; fork and live deployment still pending                       | PREFLIGHT COMPLETE; DEPLOYMENT PENDING  |
 | Final testing/security documentation               | `TESTING.md` and `SECURITY_NOTES.md`                                                      | PENDING                                 |
 
 ## 5. Immediate roadmap
@@ -110,22 +112,24 @@ Primary checklist: [`PENDING_WORK_CHECKLIST.md`](records/PENDING_WORK_CHECKLIST.
 
 ### Gate 2 — Sepolia read-only preflight
 
-- [ ] Configure `SEPOLIA_RPC_URL`; do not commit `.env` or secrets.
-- [ ] Confirm RPC chain ID `11155111`.
-- [ ] Confirm deployed bytecode at the configured VRF coordinator and LINK token.
-- [ ] Recheck coordinator, LINK token, gas lane/key hash, billing mode, callback limit, and supported APIs against current official Chainlink documentation.
-- [ ] Query the configured subscription:
+- [x] Configure `SEPOLIA_RPC_URL`; do not commit `.env` or secrets.
+- [x] Confirm RPC chain ID `11155111`.
+- [x] Confirm deployed bytecode at the configured VRF coordinator and LINK token.
+- [x] Recheck coordinator, LINK token, gas lane/key hash, billing mode, callback limit, and supported APIs against current official Chainlink documentation.
+- [x] Query the configured subscription:
   - it exists;
   - owner matches the planned deployer;
   - LINK balance is sufficient because `nativePayment: false` is configured;
   - consumers and subscription status are understood.
-- [ ] Decide whether to reuse the hard-coded subscription or create a dedicated project subscription.
+- [x] Decide whether to reuse the hard-coded subscription or create a dedicated project subscription.
+
+**Gate 2 evidence:** [dated Sepolia RPC results and reuse decision](records/records.md#step5minimum-acceptable-stage-verify-existing-consumer-of-the-subscription). Historical requests were pending at the recorded block; recheck the subscription before a live transaction.
 
 Do not broadcast if coordinator, subscription ownership, funding, or LINK billing assumptions remain uncertain.
 
 ### Gate 3 — Non-broadcast deployment simulation
 
-- [ ] Configure a disposable `SEPOLIA_PRIVATE_KEY` only for signer-dependent checks.
+- [x] Configure a disposable `SEPOLIA_PRIVATE_KEY` only for signer-dependent checks.
 - [ ] Run `DeployRaffle` without `--broadcast`.
 - [ ] Inspect the sender, constructor parameters, subscription ID, coordinator, and consumer-registration call.
 - [ ] Resolve simulation failures before any broadcast.
@@ -195,7 +199,7 @@ A fork cannot prove live VRF nodes, billing latency, Automation monitoring, Auto
 | R-03 | Coordinator can be changed through inherited privileged behavior            | ACCEPTED TRUST ASSUMPTION     | Owner/coordinator custody must be documented and controlled.                                                    |
 | R-04 | Callback ignores local request-ID validation and assumes valid random words | ACCEPTED WITHIN CURRENT MODEL | Current design relies on the configured coordinator and one-request-at-a-time state machine.                    |
 | R-05 | A permanently rejecting winner cannot withdraw its own claim                | DESIGN LIMITATION             | Later rounds remain live, but no alternate recipient/claim-transfer path exists.                                |
-| R-06 | Sepolia constants and hard-coded subscription may be stale or unusable      | OPEN                          | Verify official documentation and onchain owner, balances, and consumers before deployment.                     |
+| R-06 | Sepolia constants and hard-coded subscription may become stale or unusable  | OPEN; PREFLIGHT CHECKED       | Read-only checks passed at block `11787627`; recheck before broadcast. Historical requests remain pending.       |
 | R-07 | Automation registration and live execution are unverified                   | OPEN                          | Confirm the current supported Sepolia path and complete a live round.                                           |
 | R-08 | Toolchain/compiler settings are not intentionally pinned                    | OPEN                          | Document or pin the intended toolchain before relying on bytecode/gas comparisons.                              |
 | R-09 | Historical notes or unavailable-server changes may be incomplete            | UNKNOWN                       | Treat current repository evidence as authoritative; do not infer lost changes.                                  |
@@ -237,6 +241,7 @@ A successful fork or testnet run does not establish production readiness or secu
 | 2026-08-19 to 2026-09-01 | Pull-payment and accounting work         | Failure characterized | IMPLEMENTED / LOCALLY TESTED | Pull payment, withdrawal tests, multi-round tests, and invariant |
 | 2026-09-16 to 2026-09-19 | HelperConfig safety coverage             | Proposed              | COMPLETE / LOCALLY TESTED    | `a2655d9`; four tests pass                                       |
 | 2026-09-19               | README and verification evidence refresh | Stale documentation   | UPDATED                      | `bcbbe3b`; current local evidence recorded                       |
-| 2026-09-20               | Roadmap rename and status correction     | Stale roadmap         | IN PROGRESS                  | This document; fork and Sepolia evidence remain pending          |
+| 2026-09-20               | Roadmap rename and status correction     | Stale roadmap         | IN PROGRESS                  | This document; fork and Sepolia evidence remained pending        |
+| 2026-09-26 UTC           | Sepolia read-only preflight              | Unverified external state | PREFLIGHT COMPLETE       | [RPC evidence at block `11787627`](records/records.md#step5minimum-acceptable-stage-verify-existing-consumer-of-the-subscription); Gate 3 pending |
 
 When updating this roadmap, link each status change to a commit, command output, test result, fork block, transaction, or review record. Never promote `IMPLEMENTED` directly to `SECURITY-REVIEWED`, `FORK VALIDATED`, or `DEPLOYED` without the corresponding evidence.

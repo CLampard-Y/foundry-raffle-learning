@@ -60,11 +60,11 @@ Complete this gate before using a public network.
 
 Do not broadcast transactions until every applicable item below passes.
 
-- [ ] Configure `SEPOLIA_RPC_URL` locally for read-only checks.
-- [ ] Configure a disposable `SEPOLIA_PRIVATE_KEY` before signer-dependent checks or deployment simulation.
+- [x] Configure `SEPOLIA_RPC_URL` locally for read-only checks.
+- [x] Configure a disposable `SEPOLIA_PRIVATE_KEY` before signer-dependent checks or deployment simulation.
   - A fork read-only test does not require a private key; fork deployment and Gate 3 do.
   - Never commit `.env`, print the key, or use a production key.
-- [ ] Confirm the RPC network:
+- [x] Confirm the RPC network:
 
   ```bash
   cast chain-id --rpc-url "$SEPOLIA_RPC_URL"
@@ -72,20 +72,20 @@ Do not broadcast transactions until every applicable item below passes.
 
   Expected chain ID: `11155111`.
 
-- [ ] Verify deployed bytecode exists at the configured Sepolia VRF coordinator.
-- [ ] Verify deployed bytecode exists at the configured Sepolia LINK token.
-- [ ] Recheck the coordinator, LINK token, key hash/gas lane, billing mode, and callback-gas limits against current official Chainlink documentation.
-- [ ] Query the configured VRF subscription through the coordinator:
+- [x] Verify deployed bytecode exists at the configured Sepolia VRF coordinator.
+- [x] Verify deployed bytecode exists at the configured Sepolia LINK token.
+- [x] Recheck the coordinator, LINK token, key hash/gas lane, billing mode, and callback-gas limits against current official Chainlink documentation.
+- [x] Query the configured VRF subscription through the coordinator:
   - subscription exists;
   - when deployment is planned with the configured key, subscription owner equals the address derived from `SEPOLIA_PRIVATE_KEY`;
   - LINK balance is sufficient because `nativePayment: false` is configured;
   - the subscription is not cancelled or otherwise unusable;
   - current consumers are understood.
-- [ ] Decide whether to reuse the hard-coded subscription or create a dedicated project subscription.
+- [x] Decide whether to reuse the hard-coded subscription or create a dedicated project subscription.
 
 **Stop condition:** if subscription ownership, funding, coordinator, or LINK address is uncertain, stop and resolve it before deployment.
 
-**Gate 2 evidence:** dated RPC query output (without secrets), official documentation links, and a recorded decision about the subscription.
+**Gate 2 evidence:** [dated RPC results and subscription reuse decision](records.md#step5minimum-acceptable-stage-verify-existing-consumer-of-the-subscription). Historical requests were pending at the recorded block; recheck subscription state before live deployment.
 
 ## Gate 3 — Non-broadcast deployment simulation
 

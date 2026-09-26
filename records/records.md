@@ -130,7 +130,7 @@ QA
   > `getDeployerKey()` read Sepolia deployer key only when chain id is Sepolia.
 - 2. Pay attention to the use of `vm.setEnv()`
 
-## 9.20
+## 9.20 ~ 9.21
 Sepolia preflight and small repository-status cleanup
 ### Repository status documentation update
 #### `PROJECT_STATUS_AND_ROADMAP.md`
@@ -138,13 +138,145 @@ Sepolia preflight and small repository-status cleanup
 - Invariant changes (stateful verification) update
 - The number of tests update
 
-#### Sepolia configuration preflight
-##### Step 1: configure the RPC endpoint
-```solidity
-// In your local shell.
+## 9.22 ~ 9.26
+### Gate2 — Sepolia read-only preflight
+##### Step 1: Configure the RPC Endpoint
+```shell
+# In your local shell.
 export SEPOLIA_RPC_URL='https://your-sepolia-rpc-endpoint'
 
-// Run the first read-only check.
-// Expected output: 11155111
+# Run the first read-only check.
+# Expected output: 11155111
 /home/ZKdev/.foundry/bin/cast chain-id --rpc-url "$SEPOLIA_RPC_URL"
 ```
+Proves:
+- The RPC endpoint reaches Sepolia
+
+##### Step2: Verify Coordinator & Link Address Contain Runtime Bytecode
+```shell
+  # Perform read-only RPC checks.
+  COORDINATOR_ADDRESS=0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B
+  LINK_ADDRESS=0x779877A7B0D9E8603169DdbD7836e478b4624789
+
+  # cast code <address>
+  # Performs a read-only `eth_getCode` RPC request.
+  coordinator_code=$(
+    /home/ZKdev/.foundry/bin/cast code \
+    --rpc-url "$SEPOLIA_RPC_URL" \
+    "$COORDINATOR_ADDRESS"
+  )
+
+  link_code=$(
+    /home/ZKdev/.foundry/bin/cast code \
+    --rpc-url "$SEPOLIA_RPC_URL" \
+    "$LINK_ADDRESS"
+  )
+
+  if [[ "$coordinator_code" == "0x" ]]; then
+      echo "coordinator: no runtime bytecode"
+  else
+      coordinator_bytes=$(((${#coordinator_code} - 2) / 2))
+      echo "coordinator runtime bytes: $coordinator_bytes"
+  fi
+
+  if [[ "$link_code" == "0x" ]]; then
+      echo "LINK token: no runtime bytecode"
+  else
+      link_bytes=$(((${#link_code} - 2) / 2))
+      echo "LINK token runtime bytes: $link_bytes"
+  fi
+```
+Proves:
+- The configured coordinator address has deployed code.
+- The configured LINK address has deployed code.
+Not proves:
+- The gas lane, subscription, subscription owner configured correctly.
+- Raffle is registered as a consumer.
+
+##### Step3: Check Whether settings match ducumented Eth Sepolia setup
+Document website: https://docs.chain.link/vrf/v2-5/supported-networks
+- VRF Coordinator
+```shell
+/home/ZKdev/.foundry/bin/cast code \
+  0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B \
+  --rpc-url "$SEPOLIA_RPC_URL" | cut -c 1-20
+
+source .env
+/home/ZKdev/.foundry/bin/cast code   0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B  \ --rpc-url "$SEPOLIA_RPC_URL" | cut -c 1-20
+```
+- LINK Token
+```shell
+.env
+/home/ZKdev/.foundry/bin/cast code \
+    0x779877A7B0D9E8603169DdbD7836e478b4624789 \
+    --rpc-url "$SEPOLIA_RPC_URL" | cut -c 1-20
+```
+- Gas Lane
+- `nativePayment` setting
+
+##### Step4: Check VRF Subscription
+Verify the following values:
+- `balance`
+- `nativeBalance`
+- `reqCount`
+- `owner`
+- `consumers`
+
+```solidity
+getSubscription(uint256 subscriptionId)
+returns (
+  uint96 balance,
+  uint96 nativeBalance,
+  uint64 reqCount,
+  address owner,
+  address[] consumers
+)
+
+pendingRequestExists(uint256 subscriptionId)
+returns (
+  bool
+)
+```
+
+```shell
+/home/ZKdev/.foundry/bin/cast call \
+  0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B \
+  "getSubscription(uint256)(uint96,uint96,uint64,address,address[])" \
+  38935307025656909513953714257720199287951776187933259851240202794364574788117 \
+  --rpc-url "$SEPOLIA_RPC_URL"
+
+/home/ZKdev/.foundry/bin/cast call \
+  # vrfCoordinator
+  0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B \
+  "pendingRequestExists(uint256)(bool)" \
+  # subscriptionId
+  38935307025656909513953714257720199287951776187933259851240202794364574788117 \
+  --rpc-url "$SEPOLIA_RPC_URL"
+
+# Verify the owner of the subscription
+/home/ZKdev/.foundry/bin/cast wallet address \
+  --private-key "$SEPOLIA_PRIVATE_KEY"
+```
+
+##### Step5(Minimum-Acceptable-Stage) Verify Existing Consumer of the Subscription
+
+- Verified on Sepolia: both registered consumers ([0x8a23...f410](https://sepolia.etherscan.io/address/0x8a23ca647d6edcbf28b335aa2e564e2165dff410), [0x014e...00d6](https://sepolia.etherscan.io/address/0x014ec4e62841ccdcd65658aa4f479f6afd3b00d6)) are historical `SubscriptionConsumer` test contracts deployed by the subscription owner. Both contain runtime bytecode and return the configured subscription ID from `s_subscriptionId()`.
+- Gate 2 RPC evidence (2026-09-26 17:21 UTC):
+  - Sepolia chain ID `11155111`;
+  - coordinator and LINK addresses contain runtime code. Subscription reads were pinned to block `11787627`;
+  - the owner matched the address derived from `SEPOLIA_PRIVATE_KEY`. [Official Sepolia VRF parameters](https://docs.chain.link/vrf/v2-5/supported-networks).
+
+  ```text
+  getSubscription: balance=18000000000000000000 juels (18 LINK), nativeBalance=0, reqCount=0
+  owner=0x1B2bBE13FFd0c4f2654D401d102C1CdC749Dea41
+  consumers=[0x8a23ca647D6EDCbf28b335Aa2E564E2165DFf410, 0x014eC4E62841ccdCD65658aa4f479f6AfD3b00d6]
+  pendingRequestExists=true
+  ```
+
+  The old pending request(s) remain unresolved; the exact request IDs were not traced.
+- Decision: **reuse** this subscription for the educational Sepolia smoke test and leave the old consumers registered
+  (The coordinator permits adding a new consumer and making requests while another request is pending; pending requests prevent removing consumers or cancelling the subscription).
+- Before live deployment:
+  - recheck owner, LINK balance, pending status, and consumer list;
+  - confirm the new Raffle is added after deployment.
+  - If isolation or cleanup becomes necessary later, trace the old requests or create and fund a dedicated subscription, then update `HelperConfig` with its ID.
