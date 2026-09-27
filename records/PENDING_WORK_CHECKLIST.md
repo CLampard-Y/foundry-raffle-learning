@@ -89,7 +89,7 @@ Do not broadcast transactions until every applicable item below passes.
 
 ## Gate 3 — Non-broadcast deployment simulation
 
-- [ ] Run the deployment script without `--broadcast`:
+- [x] Run the deployment script without `--broadcast`:
 
   ```bash
   forge script script/DeployRaffle.s.sol:DeployRaffle \
@@ -97,14 +97,14 @@ Do not broadcast transactions until every applicable item below passes.
     -vvvv
   ```
 
-- [ ] Inspect and record:
+- [x] Inspect and record:
   - intended sender;
   - resolved chain ID and configuration;
   - coordinator and subscription ID;
   - Raffle constructor arguments;
   - consumer-registration target;
   - whether any unexpected subscription creation or funding path is attempted.
-- [ ] Resolve any simulation revert before broadcasting.
+- [x] Resolve any simulation revert before broadcasting.
 
 **Gate 3 evidence:** successful simulation and reviewable sender/call trace.
 

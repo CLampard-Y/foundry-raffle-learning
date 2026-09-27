@@ -4,12 +4,13 @@
 
 | Field                                | Current value                                                                          |
 | ------------------------------------ | -------------------------------------------------------------------------------------- |
-| Repository state at evidence capture | `e2d71c5` — `docs: update verification status and preflight guidance`                 |
+| Repository state at evidence capture | `3d9c19e` — `docs: record Sepolia read-only preflight evidence`                        |
 | Source/test evidence baseline        | `7063450` — `chore: configure linting and fix invariant time handling`                 |
 | Latest local verification date       | 2026-09-22                                                                             |
 | Latest Sepolia read-only check       | 2026-09-26 17:21 UTC; block `11787627`                                                 |
-| Current phase                        | Gate 2 read-only preflight complete; Gate 3 simulation pending                         |
-| Next highest-value work              | Run and inspect the non-broadcast deployment simulation                                |
+| Latest deployment simulation         | 2026-09-27 05:06 UTC; no broadcast                                                      |
+| Current phase                        | Gates 1–3 complete; optional Gate 4 fork validation next                                |
+| Next highest-value work              | Pin a Sepolia block and begin Gate 4 fork validation                                    |
 | Intended scope                       | Educational and portfolio-oriented testnet project; not a production lottery           |
 
 This document uses the following evidence states:
@@ -25,7 +26,7 @@ Passing tests do not automatically establish security, live-service availability
 
 ## 2. Executive status
 
-The project is a locally verified Foundry raffle implementation with pull-payment settlement, stateful accounting tests, and local deployment integration. Sepolia read-only preflight is complete; the next gate is a non-broadcast deployment simulation. It has not yet been fork-tested, fork-deployed, deployed to Sepolia, or exercised through live VRF and Automation services.
+The project is a locally verified Foundry raffle implementation with pull-payment settlement, stateful accounting tests, and local deployment integration. Sepolia read-only preflight and a non-broadcast deployment simulation are complete. It has not yet been fork-tested, fork-deployed, deployed to Sepolia, or exercised through live VRF and Automation services.
 
 | Area                                   | Evidence state                            | Status             | Current boundary                                                                                                                                  |
 | -------------------------------------- | ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -38,6 +39,7 @@ The project is a locally verified Foundry raffle implementation with pull-paymen
 | Local deployment integration           | VERIFIED / LOCALLY TESTED                 | COMPLETE           | Local mocks, subscription creation/funding, Raffle deployment, ownership, and consumer registration are tested.                                   |
 | Local acceptance suite                 | VERIFIED                                  | COMPLETE           | 38 tests pass; build and formatting pass in the recorded verification run.                                                                        |
 | Sepolia configuration                  | LOCALLY TESTED; RPC CHECKED               | PREFLIGHT COMPLETE | Coordinator/LINK code and subscription state were checked at Sepolia block `11787627`; live VRF/Automation remain unverified.                    |
+| Deployment script simulation          | VERIFIED / NON-BROADCAST SIMULATION       | COMPLETE           | At commit `3d9c19e`, Raffle creation and consumer registration simulated successfully; no public transaction or receipt exists.                  |
 | Fork test/deployment                   | UNVERIFIED                                | OPTIONAL NEXT      | A pinned fork can validate snapshot compatibility and deployment orchestration, but not live VRF or Automation.                                   |
 | Sepolia deployment                     | UNVERIFIED                                | PLANNED            | No public deployment receipt, address, or transaction evidence is recorded.                                                                       |
 | Automation registration/live execution | UNVERIFIED                                | PLANNED            | No upkeep ID or live execution evidence is recorded.                                                                                              |
@@ -130,9 +132,11 @@ Do not broadcast if coordinator, subscription ownership, funding, or LINK billin
 ### Gate 3 — Non-broadcast deployment simulation
 
 - [x] Configure a disposable `SEPOLIA_PRIVATE_KEY` only for signer-dependent checks.
-- [ ] Run `DeployRaffle` without `--broadcast`.
-- [ ] Inspect the sender, constructor parameters, subscription ID, coordinator, and consumer-registration call.
-- [ ] Resolve simulation failures before any broadcast.
+- [x] Run `DeployRaffle` without `--broadcast`.
+- [x] Inspect the sender, constructor parameters, subscription ID, coordinator, and consumer-registration call.
+- [x] Confirm no simulation revert occurred; resolve any failure before a future broadcast.
+
+**Gate 3 evidence:** [2026-09-27 simulation record](records/records.md) at commit `3d9c19e`: two successful simulated transactions (Raffle creation and `addConsumer`), no unexpected subscription creation or funding, and no public receipts. The Raffle address in the record is simulated only.
 
 ### Gate 4 — Optional Sepolia fork validation
 
@@ -243,5 +247,6 @@ A successful fork or testnet run does not establish production readiness or secu
 | 2026-09-19               | README and verification evidence refresh | Stale documentation   | UPDATED                      | `bcbbe3b`; current local evidence recorded                       |
 | 2026-09-20               | Roadmap rename and status correction     | Stale roadmap         | IN PROGRESS                  | This document; fork and Sepolia evidence remained pending        |
 | 2026-09-26 UTC           | Sepolia read-only preflight              | Unverified external state | PREFLIGHT COMPLETE       | [RPC evidence at block `11787627`](records/records.md#step5minimum-acceptable-stage-verify-existing-consumer-of-the-subscription); Gate 3 pending |
+| 2026-09-27 UTC           | Non-broadcast deployment simulation      | Gate 3 pending        | SIMULATION COMPLETE          | [Sender, configuration, and two-call trace](records/records.md); commit `3d9c19e`; zero receipts |
 
 When updating this roadmap, link each status change to a commit, command output, test result, fork block, transaction, or review record. Never promote `IMPLEMENTED` directly to `SECURITY-REVIEWED`, `FORK VALIDATED`, or `DEPLOYED` without the corresponding evidence.

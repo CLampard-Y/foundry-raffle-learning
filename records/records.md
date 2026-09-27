@@ -139,7 +139,7 @@ Sepolia preflight and small repository-status cleanup
 - The number of tests update
 
 ## 9.22 ~ 9.26
-### Gate2 — Sepolia read-only preflight
+### Gate 2 — Sepolia read-only preflight
 ##### Step 1: Configure the RPC Endpoint
 ```shell
 # In your local shell.
@@ -280,3 +280,42 @@ returns (
   - recheck owner, LINK balance, pending status, and consumer list;
   - confirm the new Raffle is added after deployment.
   - If isolation or cleanup becomes necessary later, trace the old requests or create and fund a dedicated subscription, then update `HelperConfig` with its ID.
+
+## 9.27
+### Gate 3 - Sepolia non-broadcast deployment simulation
+```shell
+source .env
+
+forge script script/DeployRaffle.s.sol:DeployRaffle \
+  --rpc-url "$SEPOLIA_RPC_URL" \
+  -vvvv
+```
+Context:
+- 2026-09-27 05:06 UTC
+- Source commit `3d9c19e`
+- Forge `1.7.1`, Sepolia chain ID `11155111`
+- Command without `--broadcast`
+
+Resolved configuration:
+- Sender: `0x1B2bBE13FFd0c4f2654D401d102C1CdC749Dea41` (relative address to `SEPOLIA_PRIVATE_KEY`)
+- Raffle address: `0x3416390e9084B0341B11D03D2006139B0fd06FF0`
+- VRF coordinator: `0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B`
+- Chain: Sepolia (11155111)
+- Raffle constructor:
+  - `entranceFee` = 0.01 ETH;
+  - `interval` = 30 seconds;
+  - `vrfCoordinator` = 0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B;
+  - `gasLane` = 0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae;
+  - `subscriptionId` = 38935307025656909513953714257720199287951776187933259851240202794364574788117;
+  - `callbackGasLimit` = 500000;
+
+Simulated call sequence:
+1. Sender, nonce 18 → CREATE Raffle at simulated address (0x3416390e9084B0341B11D03D2006139B0fd06FF0).
+2. Same sender, nonce 19 → coordinator.addConsumer (subscriptionId, simulated Raffle address) . Simulated SubscriptionConsumerAdded event observed.
+
+Result
+- Simulation succeeded without a revert;
+- No `createSubscription` or `fundSubscription` call was attempted;
+- No transaction was broadcast;
+- No public receipt;
+- Simulated Raffle address had no on-chain code.
