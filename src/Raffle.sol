@@ -198,6 +198,22 @@ contract Raffle is VRFConsumerBaseV2Plus {
         return i_entranceFee;
     }
 
+    function getInterval() public view returns (uint256) {
+        return i_interval;
+    }
+
+    function getGasLane() public view returns (bytes32) {
+        return i_keyHash;
+    }
+
+    function getSubscriptionId() public view returns (uint256) {
+        return i_subscriptionId;
+    }
+
+    function getCallbackGasLimit() public view returns (uint32) {
+        return i_callbackGasLimit;
+    }
+
     function getRaffleState() public view returns (RaffleState) {
         return s_raffleState;
     }

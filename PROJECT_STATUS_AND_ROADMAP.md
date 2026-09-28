@@ -9,8 +9,8 @@
 | Latest local verification date       | 2026-09-22                                                                             |
 | Latest Sepolia read-only check       | 2026-09-26 17:21 UTC; block `11787627`                                                 |
 | Latest deployment simulation         | 2026-09-27 05:06 UTC; no broadcast                                                      |
-| Current phase                        | Gates 1–3 complete; optional Gate 4 fork validation next                                |
-| Next highest-value work              | Pin a Sepolia block and begin Gate 4 fork validation                                    |
+| Current phase                        | Gates 1–3 and 4A complete; optional Gate 4B fork deployment next                        |
+| Next highest-value work              | Validate deployment on an ephemeral local Sepolia fork                                  |
 | Intended scope                       | Educational and portfolio-oriented testnet project; not a production lottery           |
 
 This document uses the following evidence states:
@@ -26,7 +26,7 @@ Passing tests do not automatically establish security, live-service availability
 
 ## 2. Executive status
 
-The project is a locally verified Foundry raffle implementation with pull-payment settlement, stateful accounting tests, and local deployment integration. Sepolia read-only preflight and a non-broadcast deployment simulation are complete. It has not yet been fork-tested, fork-deployed, deployed to Sepolia, or exercised through live VRF and Automation services.
+The project is a locally verified Foundry raffle implementation with pull-payment settlement, stateful accounting tests, and local deployment integration. Sepolia read-only preflight, a non-broadcast deployment simulation, and pinned fork tests are complete. It has not yet been fork-deployed, deployed to Sepolia, or exercised through live VRF and Automation services.
 
 | Area                                   | Evidence state                            | Status             | Current boundary                                                                                                                                  |
 | -------------------------------------- | ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -40,7 +40,7 @@ The project is a locally verified Foundry raffle implementation with pull-paymen
 | Local acceptance suite                 | VERIFIED                                  | COMPLETE           | 38 tests pass; build and formatting pass in the recorded verification run.                                                                        |
 | Sepolia configuration                  | LOCALLY TESTED; RPC CHECKED               | PREFLIGHT COMPLETE | Coordinator/LINK code and subscription state were checked at Sepolia block `11787627`; live VRF/Automation remain unverified.                    |
 | Deployment script simulation          | VERIFIED / NON-BROADCAST SIMULATION       | COMPLETE           | At commit `3d9c19e`, Raffle creation and consumer registration simulated successfully; no public transaction or receipt exists.                  |
-| Fork test/deployment                   | UNVERIFIED                                | OPTIONAL NEXT      | A pinned fork can validate snapshot compatibility and deployment orchestration, but not live VRF or Automation.                                   |
+| Fork test/deployment                   | FORK TESTED; DEPLOYMENT UNVERIFIED         | 4A COMPLETE; 4B OPEN | Three tests passed at Sepolia block `11792671`; ephemeral deployment and live VRF/Automation remain unverified.                                  |
 | Sepolia deployment                     | UNVERIFIED                                | PLANNED            | No public deployment receipt, address, or transaction evidence is recorded.                                                                       |
 | Automation registration/live execution | UNVERIFIED                                | PLANNED            | No upkeep ID or live execution evidence is recorded.                                                                                              |
 | Testing documentation                  | UNVERIFIED                                | PENDING            | `TESTING.md` has not yet been created.                                                                                                            |
@@ -144,10 +144,12 @@ Fork validation is recommended but not mandatory.
 
 #### Fork test
 
-- [ ] Pin a Sepolia fork block.
-- [ ] Validate copied coordinator/LINK code and subscription state.
-- [ ] Validate configuration and constructor compatibility.
-- [ ] Do not call manually simulated callbacks “live VRF fulfillment.”
+- [x] Pin a Sepolia fork block.
+- [x] Validate copied coordinator/LINK code and subscription state.
+- [x] Validate configuration and constructor compatibility.
+- [x] Do not call manually simulated callbacks “live VRF fulfillment.”
+
+**Gate 4A evidence:** [fork test record](records/records.md#step-3-sepolia-fork-test-gate-4a), block `11792671`; 3 passed, 0 failed, 0 skipped (2026-09-28 UTC). Gate 4B remains open.
 
 #### Ephemeral fork deployment
 
@@ -228,6 +230,7 @@ A successful fork or testnet run does not establish production readiness or secu
 - Raffle tests: [`test/unit/RaffleTest.t.sol`](test/unit/RaffleTest.t.sol)
 - HelperConfig tests: [`test/unit/HelperConfigTest.t.sol`](test/unit/HelperConfigTest.t.sol)
 - Deployment integration test: [`test/integration/DeployRaffleTest.t.sol`](test/integration/DeployRaffleTest.t.sol)
+- Pinned Sepolia fork test: [`test/fork/SepoliaForkTest.t.sol`](test/fork/SepoliaForkTest.t.sol)
 - Stateful invariant: [`test/invariant/RaffleInvariantTest.t.sol`](test/invariant/RaffleInvariantTest.t.sol)
 - Test checklist: [`TEST_CHECKLIST.md`](TEST_CHECKLIST.md)
 - Pending work checklist: [`PENDING_WORK_CHECKLIST.md`](records/PENDING_WORK_CHECKLIST.md)
@@ -248,5 +251,6 @@ A successful fork or testnet run does not establish production readiness or secu
 | 2026-09-20               | Roadmap rename and status correction     | Stale roadmap         | IN PROGRESS                  | This document; fork and Sepolia evidence remained pending        |
 | 2026-09-26 UTC           | Sepolia read-only preflight              | Unverified external state | PREFLIGHT COMPLETE       | [RPC evidence at block `11787627`](records/records.md#step5minimum-acceptable-stage-verify-existing-consumer-of-the-subscription); Gate 3 pending |
 | 2026-09-27 UTC           | Non-broadcast deployment simulation      | Gate 3 pending        | SIMULATION COMPLETE          | [Sender, configuration, and two-call trace](records/records.md); commit `3d9c19e`; zero receipts |
+| 2026-09-28 UTC           | Pinned Sepolia fork tests                | Gate 4A pending       | FORK TESTED                 | [Block `11792671`; 3 passed, 0 skipped](records/records.md#step-3-sepolia-fork-test-gate-4a); Gate 4B pending |
 
 When updating this roadmap, link each status change to a commit, command output, test result, fork block, transaction, or review record. Never promote `IMPLEMENTED` directly to `SECURITY-REVIEWED`, `FORK VALIDATED`, or `DEPLOYED` without the corresponding evidence.

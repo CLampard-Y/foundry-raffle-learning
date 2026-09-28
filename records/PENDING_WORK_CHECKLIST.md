@@ -114,12 +114,14 @@ This gate is useful but not mandatory. It is not a replacement for live Sepolia 
 
 ### 4A — Fork test
 
-- [ ] Pin a Sepolia fork block for reproducibility.
-- [ ] Use a dedicated fork test or `createSelectFork` setup to validate:
+- [x] Pin a Sepolia fork block for reproducibility.
+- [x] Use a dedicated fork test or `createSelectFork` setup to validate:
   - copied coordinator and LINK bytecode/configuration;
   - copied subscription existence, owner, balances, and consumers;
   - constructor/configuration compatibility against the snapshot.
-- [ ] Do not describe manually simulated coordinator callbacks as live VRF fulfillment.
+- [x] Do not describe manually simulated coordinator callbacks as live VRF fulfillment.
+
+**Gate 4A evidence:** [pinned Sepolia fork test record](records.md#step-3-sepolia-fork-test-gate-4a), block `11792671`; 3 passed, 0 failed, 0 skipped (2026-09-28 UTC). Gate 4B remains open.
 
 ### 4B — Ephemeral fork deployment
 
