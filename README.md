@@ -39,7 +39,7 @@ The [test checklist](TEST_CHECKLIST.md) records the earlier test plan; the imple
 | Payout isolation              | Pull-payment claims, reserved-prize accounting, checks-effects-interactions withdrawal, and failure-safe claims                               |
 | Foundry verification          | Unit tests, revert assertions, event/log inspection, fuzz tests, integration testing, and stateful invariant testing                          |
 | Deployment engineering        | Configuration regression tests, network-specific broadcaster identity, local subscription setup, and consumer registration                    |
-| Reproducibility foundations   | Git submodules, `foundry.lock`, environment template, and deterministic local Anvil configuration; compiler/toolchain pinning remains pending |
+| Reproducibility foundations   | Git submodules and `foundry.lock`; CI pins Foundry `v1.7.1`, and `foundry.toml` pins Solc `0.8.35` plus EVM/optimizer settings |
 
 ## Architecture and Lifecycle
 
@@ -129,15 +129,15 @@ This compares the aggregate liability counter with the contract balance. It does
 | Component              | Version / source                                                                                 |
 | ---------------------- | ------------------------------------------------------------------------------------------------ |
 | Solidity               | Pragma `^0.8.19`                                                                                 |
-| Foundry                | `1.7.1` observed on the development server; toolchain is not pinned in-repository                |
-| Compiler               | Solc `0.8.35` selected in the latest local run; compiler version is not pinned in `foundry.toml` |
+| Foundry                | `v1.7.1` selected in the CI workflow; `1.7.1` observed locally                            |
+| Compiler               | Solc `0.8.35` pinned in `foundry.toml`; EVM `osaka`, optimizer `false`, `via_ir` `false`    |
 | Chainlink contracts    | `contracts-v1.5.0` submodule, pinned by `foundry.lock`                                           |
 | forge-std              | `v1.16.2` submodule, pinned by `foundry.lock`                                                    |
 | foundry-devops         | `0.4.0` submodule, pinned by `foundry.lock`                                                      |
 | OpenZeppelin Contracts | `v4.9.6` submodule, pinned by `foundry.lock`                                                     |
 | Solmate                | Pinned git revision in `foundry.lock`                                                            |
 
-The observed compiler/tool versions are evidence for the latest local run, not a reproducibility guarantee. Pin or document the intended toolchain before relying on bytecode or gas comparisons.
+The pinned settings and fresh-checkout results improve reproducibility; they do not establish a hosted CI run or identical behavior across every environment.
 
 ## Quick Start
 
@@ -161,17 +161,21 @@ If Foundry is not installed, follow the [official Foundry installation guide](ht
 
 ```bash
 forge build --sizes
-forge test
+forge test --no-match-path 'test/fork/**'
 ```
 
-The local suite runs in Forge's test EVM; no running Anvil node, RPC URL, funded wallet, or real private key is required. The recorded non-fork run passed **38 tests with 0 skipped**. A plain `forge test` also discovers the fork suite, which may skip without `SEPOLIA_RPC_URL`; fork evidence requires a separate run with **3 passed, 0 skipped**. `forge test` includes the invariant suite automatically.
+The local suite runs in Forge's test EVM; no running Anvil node, RPC URL, funded wallet, or real private key is required. The recorded non-fork run passed **38 tests with 0 skipped**. The path filter keeps fork tests out of this RPC-independent lane; `forge test` includes the invariant suite automatically. An unfiltered `forge test` discovers the fork suite and fails in its setup when `SEPOLIA_RPC_URL` is absent. Run the fork suite separately with a configured RPC; its recorded result is **3 passed, 0 skipped** at the pinned Sepolia block:
+
+```bash
+forge test --match-path test/fork/SepoliaForkTest.t.sol -vv
+```
 
 For a focused review or coverage report:
 
 ```bash
 forge test --match-path test/unit/HelperConfigTest.t.sol -vv
 forge test --match-path test/invariant/RaffleInvariantTest.t.sol -vv
-forge coverage --report summary
+forge coverage --no-match-path 'test/fork/**' --report summary
 ```
 
 ## Local Anvil Deployment
@@ -282,9 +286,13 @@ Notes / configuration version:
 
 ## Testing and Verification
 
-### Current local snapshot
+### T1 local reproducibility check (2026-09-29)
 
-The latest local verification was run on **2026-09-22**, using source/test baseline `7063450`, Foundry `1.7.1`, and Solc `0.8.35`:
+At implementation commit `70d1941`, a fresh local checkout with initialized submodules and empty Sepolia RPC/private-key values passed formatting, an uncached Solc `0.8.35` build, and the filtered local test and coverage runs (38 passed, 0 failed, 0 skipped). The build retained three OpenZeppelin `EnumerableSet.at` future-keyword warnings. The fork suite was checked separately with a configured RPC; these results do not establish a hosted CI run or live VRF fulfillment. See the [dated T1 record](records/records.md) for the command and evidence boundaries.
+
+### Historical coverage snapshot (2026-09-22)
+
+This earlier verification used source/test baseline `7063450`, Foundry `1.7.1`, and Solc `0.8.35`. Its commands and coverage percentages describe that revision, not the current T1 baseline:
 
 | Command                           | Result                                                                                                    |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -295,7 +303,7 @@ The latest local verification was run on **2026-09-22**, using source/test basel
 
 Compilation during verification also reported dependency identifier warnings (`EnumerableSet.at`) and the invariant handler's `actorsLength` naming collision. These are not test failures; passing tests do not resolve or replace warning review.
 
-Current test breakdown:
+Test breakdown at that snapshot:
 
 - 32 Raffle unit tests, including 3 fuzz tests with 256 runs each;
 - 4 HelperConfig unit tests;
@@ -303,7 +311,7 @@ Current test breakdown:
 - 1 stateful invariant with 128 runs, depth 64, and 8,192 handler calls;
 - invariant handler selectors: `enter`, `settle`, and `withdraw`.
 
-Coverage details:
+Coverage details at that snapshot:
 
 | Target                                     |  Lines | Branches | Boundary                                               |
 | ------------------------------------------ | -----: | -------: | ------------------------------------------------------ |
@@ -363,12 +371,12 @@ The workflow at [`.github/workflows/test.yml`](.github/workflows/test.yml) curre
 ```text
 forge fmt --check
 forge build --sizes
-forge test -vvv
+forge test --no-match-path 'test/fork/**' -vvv
 ```
 
-It does not explicitly run a separate `forge coverage` or invariant command, although `forge test` discovers invariant tests present in the checked-out tree. No private key or RPC secret is required for the local CI workflow.
+The workflow selects Foundry `v1.7.1`; `foundry.toml` pins Solc `0.8.35`, EVM `osaka`, optimizer `false`, and `via_ir` `false`. It does not run a separate coverage or fork step, while the filtered local test command includes invariant tests. No private key or RPC secret is required for this CI lane.
 
-These commands passed locally in the snapshot above. This is not evidence of a particular remote GitHub Actions run. CI currently installs Foundry without a fixed version, and `foundry.toml` does not pin Solc; reproducible release artifacts require explicit toolchain settings.
+The T1 checks passed in a fresh local checkout; no particular remote GitHub Actions run is evidenced here. A skipped fork test would not count as a successful fork check; the dedicated fork lane now fails at setup without an RPC.
 
 ## Security Assumptions and Known Limitations
 
@@ -405,7 +413,7 @@ This table summarizes status; the [pending checklist](records/PENDING_WORK_CHECK
 | --------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Pull-payment and cross-round regression tests | Locally tested                             | Current Raffle suite and bounded invariant pass; security review remains separate                                                                   |
 | Initial HelperConfig test set                 | Locally tested                             | Four tests pass, within the behavior matrix's stated limits                                                                                         |
-| Reproducible toolchain                        | Pending                                    | Explicit Foundry/Solc/settings baseline used in both local verification and CI                                                                      |
+| Reproducible toolchain                        | Locally verified (T1)                      | Foundry/Solc/settings pinned; fresh checkout at `70d1941` passed local checks. Hosted CI execution is not claimed                                   |
 | Additional verification                       | Proposed                                   | Risk-selected tests from the gaps above, with assertions and reproducible results                                                                   |
 | Sepolia preflight and simulation              | Recorded; refresh before broadcast         | Recheck current configuration, owner, funding, and final deployment simulation                                                                      |
 | Pinned Sepolia fork tests                     | Snapshot checks passed                    | Three tests passed at block `11792671`; fork deployment remains optional and unverified                                                              |

@@ -1,6 +1,6 @@
 # Project Status and Improvement Roadmap
 
-Updated: **2026-09-28 (Asia/Shanghai)**. Repository/source baseline reviewed: **`01a26a9`**, `test(fork): validate Raffle against pinned Sepolia state`. The worktree was clean before this documentation review.
+Updated: **2026-09-29 (Asia/Shanghai)**. Current implementation baseline: **`70d1941`**. The September 28 planning review below used `01a26a9`; T1's later local evidence is recorded separately.
 
 ## 1. Purpose and ownership
 
@@ -12,14 +12,15 @@ The intended outcome is an explainable Solidity/Foundry testnet project with def
 
 ## 2. Current position and evidence
 
-**Assessment:** local implementation and initial verification are complete; snapshot integration is recorded; the project is in focused verification/reproducibility work before a live testnet round. Optional fork deployment is useful practice, but not automatically the highest-value remaining task.
+**Assessment:** local implementation, T1 reproducibility checks, and snapshot integration are recorded. Focused accounting and callback/privilege verification remain before a live testnet round. Optional fork deployment is useful practice, but not automatically the highest-value remaining task.
 
 | Area | Evidence and boundary | State |
 | --- | --- | --- |
 | Raffle and pull payment | `OPEN → CALCULATING → OPEN`; fulfillment credits claims; separate CEI withdrawal; rejecting receivers no longer block settlement through payout | Implemented / locally tested |
 | Accounting | Previous claims excluded from later prizes; individual withdrawal cases tested | Locally tested; repeated-winner and delayed-round depth pending |
 | Stateful invariant | `totalOutstandingClaims <= balance`; 128 × 64 actions | Locally tested; independent conservation/reconciliation still needed |
-| Configuration/deployment | Four HelperConfig tests; integrated local deployment/ownership/consumer test | Locally tested; toolchain pinning and some signer cases remain |
+| Configuration/deployment | Four HelperConfig tests; integrated local deployment/ownership/consumer test | Locally tested; some signer cases remain |
+| Build and test lanes | Foundry `v1.7.1` selected in CI; Solc `0.8.35` and EVM settings pinned; local checks reproduced at `70d1941` without Sepolia credentials | T1 locally verified; hosted CI run not evidenced |
 | Sepolia preflight | September 26 snapshot at `11787627`; 18 LINK, expected owner, two historical consumers, unresolved pending requests | Recorded historical evidence; refresh before broadcast |
 | Deployment simulation | September 27 at source `3d9c19e`: CREATE and `addConsumer` succeeded | Non-broadcast only |
 | Fork tests | September 28, block `11792671`, 3 passed | Snapshot config/subscription/constructor checks only |
@@ -30,7 +31,7 @@ The intended outcome is an explainable Solidity/Foundry testnet project with def
 
 ### Verification ledger
 
-Fresh checks for this review at `01a26a9`, 2026-09-28:
+Historical planning-review checks at `01a26a9`, 2026-09-28:
 
 | Command | Result |
 | --- | --- |
@@ -42,7 +43,7 @@ Fresh checks for this review at `01a26a9`, 2026-09-28:
 
 Commands used `/home/ZKdev/.foundry/bin/forge` on this server. No fork RPC check, broadcast or coverage rerun was performed in this planning review. The recorded September 22 coverage was 81.75% aggregate lines / 89.29% branches, with 100% reported Raffle execution coverage; that is historical, not a new full-suite measurement. The September 28 fork result is also a separate recorded run, not part of the 38 local tests above.
 
-CI currently uses an unpinned Foundry toolchain and `forge test -vvv`. The fork suite skips when its RPC variable is absent. Compiler/EVM/optimizer choices should be explicit before creating deployment artifacts. Known compiler warnings were recorded earlier; a cached build is not a fresh compiler-warning audit.
+**T1 follow-up (2026-09-29, `70d1941`):** Foundry/Solc and EVM settings are pinned, CI excludes fork tests, and the fork suite fails at setup instead of skipping when its RPC is absent. A fresh local checkout with initialized submodules and empty Sepolia values passed formatting, an uncached build, filtered local tests and coverage (38 passed, 0 failed, 0 skipped); only three OpenZeppelin future-keyword warnings remain. A configured fork run separately recorded 3 passed, 0 skipped. See [records](records/records.md). This is local/fork evidence, not a hosted CI run or live VRF fulfillment.
 
 ## 3. Review of the previous plan
 
@@ -64,7 +65,7 @@ This is a risk-based planning review, not independent security certification. Ca
 | Milestone | Deliverable | Exit criterion | Status / task mapping |
 | --- | --- | --- | --- |
 | M0 — Core implementation | Raffle state machine, subscription scripts, pull-payment settlement | Core flow and payout regression tests | Complete locally |
-| M1 — Verification and reproducibility | Explicit build/CI baseline, stronger accounting tests, callback and privilege characterization | Required local tests pass; material findings addressed or explicitly bounded for this testnet scope | In progress: T1–T3 |
+| M1 — Verification and reproducibility | Explicit build/CI baseline, stronger accounting tests, callback and privilege characterization | Required local tests pass; material findings addressed or explicitly bounded for this testnet scope | T1 locally verified; T2–T3 pending |
 | M2 — External compatibility | Pinned fork evidence; fresh configuration/owner/funding check; reviewed deployment simulation | Snapshot and current assumptions recorded separately | B1 recorded; T4 refresh pending; B2 optional |
 | M3 — Live integration | One real Sepolia VRF round and withdrawal with manual upkeep trigger | Public receipts tie final source/config to successful callback and accounting | Pending: Gate 5A |
 | M4 — Explainable closure | Concise testing/security evidence, residual risks and operational procedure | User can explain major design/failure paths; documentation matches final revision | Start alongside M1, finish through T5 |
@@ -116,8 +117,8 @@ These labels are not a cumulative safety rating. Coverage and test counts measur
 | R7 | Permanently rejecting winner cannot withdraw its own claim | Accepted limitation for this testnet milestone; claim remains reserved and later rounds proceed; alternate recipient conditional |
 | R8 | Shared static subscription includes historical pending requests | Previous reuse decision preserved; T4 refreshes funding/owner/consumer state and budget; isolate if activity cannot be bounded |
 | R9 | Deployment and consumer registration are separate transactions | T4/T5A handle partial success; do not enter until membership is confirmed |
-| R10 | Fork tests can skip silently when RPC is absent | T1 separates test lanes and requires explicit non-skipped fork evidence |
-| R11 | Toolchain/build settings not pinned consistently | T1 establishes intended compiler/Foundry/settings before deployment |
+| R10 | Fork tests previously skipped silently when RPC was absent | T1 excludes them from default CI and fails the explicit fork lane at setup without RPC; require 3 passed, 0 skipped for fork evidence |
+| R11 | Toolchain/build settings were not pinned consistently | T1 pins Foundry/Solc/settings and records fresh-checkout local results; hosted CI execution is not yet evidenced |
 | R12 | Legacy Automation sunset and no live scheduler evidence | Manual-triggered C1 is default; supported automation is conditional C2 |
 | R13 | Current invariant tops up subscription and settles immediately | Bound the model; T2 adds delayed-round regression; don't claim billing/latency coverage |
 | R14 | Notes and README lag execution evidence | T5 reconciles summaries; dated records remain evidence, not automatically current truth |
@@ -153,6 +154,7 @@ Finish this repository when required local hardening and the chosen integration 
 | `3d9c19e`, `49490b4` | Recorded Sepolia preflight and non-broadcast simulation |
 | `01a26a9` | Three pinned Sepolia fork tests and recorded results |
 | 2026-09-28 planning review | Current local tests rerun; checklist/roadmap separated; accounting, callback, reproducibility and automation scope revised |
+| `70d1941`, 2026-09-29 | T1 toolchain/test-lane changes; fresh-checkout local verification recorded separately from fork evidence |
 
 Relevant implementation: [Raffle](src/Raffle.sol), [deployment](script/DeployRaffle.s.sol), [configuration](script/HelperConfig.s.sol), [interactions](script/Interactions.s.sol).
 

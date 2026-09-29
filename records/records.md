@@ -400,3 +400,63 @@ Decision:
 - Keep fork deployment and external scheduling optional;
 - refresh subscription state before any public broadcast.
 - Scope and next tasks: [roadmap](../PROJECT_STATUS_AND_ROADMAP.md) and [pending checklist](PENDING_WORK_CHECKLIST.md).
+
+## 9.29
+### T1 - Reproducible builds and explicit test lanes
+- Fix `solc_version` in `foundry.toml`
+- Add explicit values of `EVM target`, `optimizer` and `via_ir`
+- Specify Foundry version (`v1.7.1`) in CI.
+- Modify CI to run local tests only.
+- Add fail-fast to `SepoliaForkTest` when RPC is absent.
+
+**Baseline**: Foundry `1.7.1`; Solc `0.8.35`; EVM `osaka`; optimizer `false`; via-ir `false`.
+**Local checks**: formatting passed; uncached build compiled 47 files; local tests and coverage `each ran 38 tests with 0 failed and 0 skipped`.
+**Fork lane**: configured RPC gave `3 passed/0 failed/0 skipped`; an explicitly empty RPC caused a clear `setUp()` failure instead of a skip.
+**Warnings/limit**: three `EnumerableSet` future-keyword warnings.
+
+#### Fresh-checkout check
+```shell
+# Create and identify a fresh checkout.
+T1_CHECKOUT="$(mktemp -d /tmp/raffle-t1.XXXXXX)"
+git clone --recurse-submodules . "$T1_CHECKOUT"
+git -C "$T1_CHECKOUT" rev-parse --short HEAD
+git -C "$T1_CHECKOUT" submodule status
+
+# Output
+Submodule path 'lib/solmate/lib/ds-test': checked out 'e282159d5170298eb2455a6c05280ab5a73a4ef0'
+70d1941
+ 86aa5a1d34b20eda8d18fe6eb0e4882948e545ba lib/chainlink-evm (v0.3.3-9-g86aa5a1d34)
+ bf647bd6046f2f7da30d0c2bf435e5c76a780c1b lib/forge-std (v1.16.2)
+ efff097a87e70c3d15661c9f2a2daeae0b33d5d5 lib/foundry-devops (0.4.0)
+ dc44c9f1a4c3b10af99492eed84f83ed244203f6 lib/openzeppelin-contracts (v4.9.5-2-gdc44c9f1)
+ 89365b880c4f3c786bdd453d4b8e8fe410344a69 lib/solmate (v6-207-g89365b8)
+```
+- `mktemp -d` creates a new empty directory under `/tmp`.
+- `recurse-submodules` checks out the project's pinned dependencies.
+- `git -C "$T1_CHECKOUT"` runs Git in that clone without changing current directory.
+- `rev-parse` checks that you clone the expected commit.
+- `submodule status` checks that dependencies were initialized at their recorded revisions.
+
+```shell
+# Test the local lane without Sepolia values.
+cd "$T1_CHECKOUT"
+SEPOLIA_RPC_URL='' SEPOLIA_PRIVATE_KEY='' \
+  /home/ZKdev/.foundry/bin/forge fmt --check
+
+SEPOLIA_RPC_URL='' SEPOLIA_PRIVATE_KEY='' \
+  /home/ZKdev/.foundry/bin/forge build --no-cache --sizes
+
+SEPOLIA_RPC_URL='' SEPOLIA_PRIVATE_KEY='' \
+  /home/ZKdev/.foundry/bin/forge test \
+  --no-match-path 'test/fork/**' --summary
+
+SEPOLIA_RPC_URL='' SEPOLIA_PRIVATE_KEY='' \
+  /home/ZKdev/.foundry/bin/forge coverage \
+  --no-match-path 'test/fork/**' --report summary
+
+```
+Observed in the fresh checkout:
+- Identity `70d1941` matches the recorded baseline.
+- Only three reviewed OpenZeppelin warnings.
+- Formatting passed.
+- Local tests and coverage each ran 38 tests: 38 passed/0 failed/0 skipped.

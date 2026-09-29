@@ -1,6 +1,6 @@
 # Pending Work Checklist
 
-Updated: **2026-09-28 (Asia/Shanghai)**. Reviewed source baseline: `01a26a9`.
+Updated: **2026-09-29 (Asia/Shanghai)**. T1 implementation baseline: `70d1941`; later tasks remain as specified below.
 
 This is the authoritative queue of **remaining work**. The [roadmap](../PROJECT_STATUS_AND_ROADMAP.md) owns scope, milestones and risk decisions; [records](records.md) owns dated commands, results and learning notes. Historical Gate numbers are retained for traceability, not as instructions to repeat completed work.
 
@@ -8,14 +8,14 @@ This is the authoritative queue of **remaining work**. The [roadmap](../PROJECT_
 
 ## Completed baseline
 
-| Evidence | Established result | Boundary |
-| --- | --- | --- |
-| Local suite | 38 passed on 2026-09-28: 32 Raffle unit/fuzz, 4 HelperConfig, 1 local integration, 1 invariant; formatting and build passed | RPC/fork tests excluded from this run |
-| Invariant | 128 runs, depth 64, 8,192 calls, zero reverts | Only `outstandingClaims <= balance`; handler settles immediately and tops up mock funding |
-| Gate 2 preflight | Recorded 2026-09-26, block `11787627`: code presence, owner, 18 LINK, two historical consumers, pending requests | Historical snapshot, not current funding assurance |
-| Gate 3 simulation | Recorded 2026-09-27: deployment + `addConsumer` succeeded without broadcast | Simulated address is not a public deployment |
-| Gate 4A fork tests | Recorded 2026-09-28: 3 passed at block `11792671` | Copied config/subscription and constructor checks; no script broadcast or VRF service |
-| Gate 4B / live deployment | No recorded completion | Pending/optional as specified below |
+| Evidence                  | Established result                                                                                                          | Boundary                                                                                  |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Local suite               | 38 passed on 2026-09-28: 32 Raffle unit/fuzz, 4 HelperConfig, 1 local integration, 1 invariant; formatting and build passed | RPC/fork tests excluded from this run                                                     |
+| Invariant                 | 128 runs, depth 64, 8,192 calls, zero reverts                                                                               | Only `outstandingClaims <= balance`; handler settles immediately and tops up mock funding |
+| Gate 2 preflight          | Recorded 2026-09-26, block `11787627`: code presence, owner, 18 LINK, two historical consumers, pending requests            | Historical snapshot, not current funding assurance                                        |
+| Gate 3 simulation         | Recorded 2026-09-27: deployment + `addConsumer` succeeded without broadcast                                                 | Simulated address is not a public deployment                                              |
+| Gate 4A fork tests        | Recorded 2026-09-28: 3 passed at block `11792671`                                                                           | Copied config/subscription and constructor checks; no script broadcast or VRF service     |
+| Gate 4B / live deployment | No recorded completion                                                                                                      | Pending/optional as specified below                                                       |
 
 Do not reopen completed pull-payment, withdrawal-event or HelperConfig zero-key tests. `WinningCredited` still lacks an exact event assertion; absent/malformed credentials differ from a zero key.
 
@@ -23,13 +23,13 @@ Do not reopen completed pull-payment, withdrawal-event or HelperConfig zero-key 
 
 Recommended order: **T1 → T2 → T3 → T4 → Gate 5A → T5 closure**. Gate 4B can run alongside T2–T4 as a bounded learning exercise, or be explicitly skipped. Begin T5 security notes during T2; Gate 5B is optional.
 
-| Label | Meaning | Current evidence |
-| --- | --- | --- |
-| A — Local | Local behavior/build checked at an identified revision | Established within existing test scope; T1–T3 strengthen it |
-| B1 — Fork snapshot | Assertions against a pinned public-chain snapshot | Recorded Gate 4A completion |
-| B2 — Fork deployment | Script transactions and postconditions on a persistent local fork | Not established; optional Gate 4B |
-| C1 — Live VRF round | Public deployment, consumer setup, real fulfillment, credit and withdrawal | Not established; required for a live-integration claim |
-| C2 — Automated execution | Supported external scheduler actually triggers a round | Not established; optional extension to C1 |
+| Label                    | Meaning                                                                    | Current evidence                                            |
+| ------------------------ | -------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| A — Local                | Local behavior/build checked at an identified revision                     | Established within existing test scope; T1–T3 strengthen it |
+| B1 — Fork snapshot       | Assertions against a pinned public-chain snapshot                          | Recorded Gate 4A completion                                 |
+| B2 — Fork deployment     | Script transactions and postconditions on a persistent local fork          | Not established; optional Gate 4B                           |
+| C1 — Live VRF round      | Public deployment, consumer setup, real fulfillment, credit and withdrawal | Not established; required for a live-integration claim      |
+| C2 — Automated execution | Supported external scheduler actually triggers a round                     | Not established; optional extension to C1                   |
 
 These are evidence labels, not safety grades. Documentation closure is separate. C1 does not require B2 or C2. A skipped fork test does not establish B1.
 
@@ -37,10 +37,10 @@ These are evidence labels, not safety grades. Documentation closure is separate.
 
 **Required before the next public deployment.** Small configuration/CI changes; no new infrastructure.
 
-- [ ] Select/pin intended Foundry and Solc versions and record optimizer/EVM settings; use the same baseline locally and in CI. Observed Foundry is `1.7.1`; historical compiler evidence is `0.8.35`. Verify chosen settings rather than upgrading dependencies opportunistically.
-- [ ] Make default CI/local acceptance explicitly independent of RPC. Keep fork tests opt-in; pull requests should not require secrets.
-- [ ] Make the explicit fork command require a configured RPC and report **3 passed, 0 skipped** for the present suite. Missing `SEPOLIA_RPC_URL` currently causes skipping; document/enforce a fail-fast prerequisite in the dedicated workflow.
-- [ ] After configuration changes, run and record:
+- [x] Select/pin intended Foundry and Solc versions and record optimizer/EVM settings; use the same baseline locally and in CI. Observed Foundry is `1.7.1`; historical compiler evidence is `0.8.35`. Verify chosen settings rather than upgrading dependencies opportunistically.
+- [x] Make default CI/local acceptance explicitly independent of RPC. Keep fork tests opt-in; pull requests should not require secrets.
+- [x] Make the explicit fork command require a configured RPC and report **3 passed, 0 skipped** for the present suite. Missing `SEPOLIA_RPC_URL` currently causes revert; document/enforce a fail-fast prerequisite in the dedicated workflow.
+- [x] After configuration changes, run and record:
 
   ```bash
   forge fmt --check
@@ -55,7 +55,7 @@ These are evidence labels, not safety grades. Documentation closure is separate.
   forge test --match-path test/fork/SepoliaForkTest.t.sol -vv
   ```
 
-- [ ] Record revision, settings, results, skip counts and reviewed warnings in `records.md`. Coverage is a dated diagnostic, not a percentage target.
+- [x] Record revision, settings, results, skip counts and reviewed warnings in `records.md`. Coverage is a dated diagnostic, not a percentage target.
 
 **Done when:** a fresh checkout with initialized submodules reproduces local checks without RPC, and fork execution has explicit prerequisites/results. Explain why skipping differs from passing.
 

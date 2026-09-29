@@ -1,5 +1,7 @@
 # Pending Test Checklist
 
+> Historical test-planning record, retained as of 2026-09-28. The current task queue is [records/PENDING_WORK_CHECKLIST.md](records/PENDING_WORK_CHECKLIST.md). Checked items below describe their narrow tested behavior; they do not establish complete protocol verification. Do not maintain a second active queue here.
+
 This checklist records the highest-value test work identified after the pull-payment remediation.
 It is intentionally risk-based: coverage percentage alone is not a sufficient reason to add a test.
 
@@ -29,9 +31,9 @@ Create a focused test file such as `test/unit/HelperConfigTest.t.sol`.
   - Reason: these constants directly affect public-testnet deployment and VRF fulfillment.
   - Purpose: catches stale or accidentally changed network configuration before deployment.
 
-- [x] Missing Sepolia deployer key reverts with `HelperConfig__InvalidDeployerKey`.
-  - Reason: prevents a deployment attempt without a valid credential.
-  - Purpose: verifies deployment credential validation.
+- [x] Zero Sepolia deployer key reverts with `HelperConfig__InvalidDeployerKey`.
+  - Actual evidence: `test_getDeployerKeyReverts_WhenDeployerKeyInvalid` sets the environment value to `0`.
+  - Boundary: missing and malformed environment values are not tested by this case; do not infer their error type from the zero-key test.
   - Security note: use a test-only environment value; never expose a real private key.
 
 ## Already covered: do not duplicate these tests
