@@ -23,7 +23,7 @@ contract SepoliaForkTest is Test {
     function setUp() public {
         // Set up and verify RPC URL.
         string memory rpcUrl = vm.envOr("SEPOLIA_RPC_URL", string(""));
-        vm.skip(bytes(rpcUrl).length == 0, "Sepolia RPC URL not set");
+        require(bytes(rpcUrl).length != 0, "Sepolia RPC URL not set");
         vm.createSelectFork(rpcUrl, 11792671);
         assertEq(vm.getChainId(), ETH_SEPOLIA_CHAIN_ID);
         assertEq(vm.getBlockNumber(), 11792671);

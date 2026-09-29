@@ -1,4 +1,12 @@
 [profile.default]
+solc_version = "0.8.35"
+# Chose the target EVM rules.
+evm_version = "osaka"
+# Decide whether to use extra code simplification.
+optimizer = false
+# Chose the compilation route.
+# `false` uses the conventional route.
+via_ir = false
 src = "src"
 out = "out"
 libs = ["lib"]

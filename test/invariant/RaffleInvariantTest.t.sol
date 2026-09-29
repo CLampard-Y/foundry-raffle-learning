@@ -87,13 +87,13 @@ contract RaffleHandler is Test {
     }
 
     function withdraw(uint256 actorSeed) external {
-        uint256 actorsLength = s_actors.length;
+        uint256 actorCount = s_actors.length;
 
-        if (actorsLength == 0) {
+        if (actorCount == 0) {
             return;
         }
 
-        address actor = s_actors[actorSeed % actorsLength];
+        address actor = s_actors[actorSeed % actorCount];
 
         if (raffle.getClaimableWinnings(actor) == 0) {
             return;
