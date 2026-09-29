@@ -1,5 +1,7 @@
 # Records
 
+> Dated execution and learning history. Older entries may contain preliminary interpretations; use current code and [PENDING_WORK_CHECKLIST.md](PENDING_WORK_CHECKLIST.md) for current tasks. The 8.17 deployment-identity test was local integration, not a public-chain fork test. The 9.16–9.19 credential test covers a zero key, not an absent key.
+
 ## 8.17
 ### 1. Sort Out
 sort out the current state of the repo and next steps
@@ -283,7 +285,7 @@ returns (
   - confirm the new Raffle is added after deployment.
   - If isolation or cleanup becomes necessary later, trace the old requests or create and fund a dedicated subscription, then update `HelperConfig` with its ID.
 
-## 9.27
+## 9.27 ~ 9.28
 ### Gate 3 - Sepolia non-broadcast deployment simulation
 ```shell
 source .env
@@ -384,3 +386,17 @@ Biggest difference with Gate 5: Fork contains the coordinator's code and the sub
 - Not proves: Does not prove VRF nodes will fulfill a request.
 
 **Gate 4A evidence (2026-09-28 UTC):** Sepolia RPC fork at block `11792671` (chain ID `11155111`; block hash recorded above). Run `/home/ZKdev/.foundry/bin/forge test --match-path test/fork/SepoliaForkTest.t.sol -vv`: 3 passed, 0 failed, 0 skipped. `forge fmt --check test/fork/SepoliaForkTest.t.sol` passed. The tests checked configured coordinator/LINK addresses and code presence, copied subscription state, and Raffle constructor initialization. RPC endpoint details and secrets are not recorded. This is snapshot evidence only, not live VRF fulfillment or consumer registration.
+
+### Planning review and local verification
+
+Source baseline: `01a26a9`; Foundry `1.7.1`. This was a documentation review, not implementation of the newly proposed tasks.
+
+- `forge fmt --check` and `forge build --sizes` passed (build cache reused).
+- `forge test --no-match-path 'test/fork/**'`: 38 passed, 0 failed, 0 skipped; invariant: 128 runs × 64 calls, zero reverts.
+- No fresh fork/RPC check, coverage run, or broadcast was performed.
+
+Decision:
+- Prioritize accounting reconciliation, callback-gas and privilege checks, and reproducible builds.
+- Keep fork deployment and external scheduling optional;
+- refresh subscription state before any public broadcast.
+- Scope and next tasks: [roadmap](../PROJECT_STATUS_AND_ROADMAP.md) and [pending checklist](PENDING_WORK_CHECKLIST.md).

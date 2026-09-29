@@ -21,8 +21,10 @@ This repository is intentionally a learning and testnet-oriented project. It is 
 | Stateful invariant                    | `LOCALLY TESTED`               | `totalOutstandingClaims <= address(raffle).balance` across handler-generated operations; 128 runs, depth 64, 8,192 calls, zero reverts in the observed run.      |
 | Local test suite                      | `PASS`                         | 38 tests: 32 Raffle unit/fuzz tests, 4 HelperConfig tests, 1 local deployment integration test, and 1 invariant.                                                 |
 | Formatting and build                  | `PASS WITH COMPILER WARNINGS`  | `forge fmt --check` and `forge build --sizes` pass; the `block.timestamp` lint is intentionally excluded because the raffle uses timestamp-based elapsed-time logic. |
+| Sepolia preflight and simulation      | `RECORDED; REFRESH BEFORE BROADCAST` | Read-only checks and a non-broadcast deployment simulation passed at their recorded dates; subscription state can change.                                  |
+| Pinned Sepolia fork tests             | `PASS (SNAPSHOT ONLY)`         | Three tests passed at block `11792671`; no fork deployment, live VRF fulfillment, or public transaction is established.                                          |
 | Public Sepolia deployment             | `NOT VERIFIED`                 | No deployment receipt, transaction hash, deployed address, or successful live round is recorded in this repository.                                              |
-| Chainlink Automation registration     | `NOT VERIFIED`                 | Contract-level `checkUpkeep`/`performUpkeep` logic exists, but no upkeep ID or live execution evidence is recorded.                                              |
+| Chainlink Automation registration     | `OPTIONAL / NOT VERIFIED`      | Contract-level `checkUpkeep`/`performUpkeep` logic exists, but no upkeep ID or live execution evidence is recorded.                                              |
 | Security audit / production readiness | `NOT CLAIMED`                  | No formal audit or production deployment is claimed.                                                                                                             |
 
 The [test checklist](TEST_CHECKLIST.md) records the earlier test plan; the implementation and verification results below describe the current evidence. Historical notes and checklist wording do not establish live deployment or security-review status.
@@ -162,7 +164,7 @@ forge build --sizes
 forge test
 ```
 
-The local suite runs in Forge's test EVM; no running Anvil node, RPC URL, funded wallet, or real private key is required. The expected result at the recorded baseline is **38 passed, 0 failed, 0 skipped**. `forge test` includes the invariant suite automatically.
+The local suite runs in Forge's test EVM; no running Anvil node, RPC URL, funded wallet, or real private key is required. The recorded non-fork run passed **38 tests with 0 skipped**. A plain `forge test` also discovers the fork suite, which may skip without `SEPOLIA_RPC_URL`; fork evidence requires a separate run with **3 passed, 0 skipped**. `forge test` includes the invariant suite automatically.
 
 For a focused review or coverage report:
 
@@ -195,7 +197,7 @@ The standalone interaction scripts depend on their own configuration resolution 
 
 ## Sepolia Deployment — Planned / Not Verified
 
-The Sepolia configuration resolver is locally tested, but no live deployment or successful live VRF/Automation round is currently evidenced. Exact-value assertions protect a recorded configuration from accidental changes; they do not establish that those values are currently valid on Sepolia. The commands below remain deployment templates until preflight and live verification are completed.
+Sepolia read-only preflight, a non-broadcast deployment simulation, and pinned fork tests are recorded; no live deployment or successful live VRF round is evidenced. Exact-value assertions and historical RPC checks do not establish that the subscription remains ready now. The commands below remain deployment templates; refresh mutable assumptions before broadcasting.
 
 ### Environment
 
@@ -212,13 +214,15 @@ SEPOLIA_PRIVATE_KEY=<dedicated-testnet-private-key>
 
 Never commit `.env`, private keys, RPC credentials, or sensitive broadcast data. Use a disposable testnet account and fund it only with the required testnet assets.
 
-### Preflight checklist
+### Fresh pre-broadcast checklist
+
+Earlier checks and simulation passed at their recorded dates. Recheck changing network and subscription state, then simulate the final revision before a public transaction.
 
 - [ ] Verify the current Chainlink VRF v2.5 Sepolia coordinator, gas lane/key hash, LINK token, billing mode, and supported API from current official documentation.
 - [ ] Confirm that the configured subscription exists, is funded, and is owned by the account corresponding to `SEPOLIA_PRIVATE_KEY`.
 - [ ] Decide whether the configured subscription should be reused or replaced with a project-specific subscription.
 - [ ] Inspect a non-broadcast simulation before sending transactions.
-- [ ] Plan Chainlink Automation registration separately; `DeployRaffle` does not register an upkeep.
+- [ ] For the minimal live VRF round, plan a manual call to permissionless `performUpkeep`; evaluate supported external scheduling separately only if needed. `DeployRaffle` does not register an upkeep.
 - [ ] Record the source commit, compiler/Foundry versions, constructor arguments, and deployed-bytecode verification result.
 - [ ] Complete a live entry, upkeep, VRF fulfillment, and withdrawal; record receipts and confirm accounting after withdrawal.
 
@@ -343,9 +347,9 @@ The Sepolia lookup selects the chain ID using the production constant getter. It
 
 These are proposed follow-ups, not claims of completed work:
 
-1. **Public-network integration:** verify actual subscription ownership/funding, consumer registration, LINK billing, callback gas, Automation execution, and a complete live round. Local mocks cannot establish node availability, fees, or latency.
+1. **Public-network integration:** refresh subscription ownership/funding, verify consumer registration, LINK billing, callback gas, and a complete live VRF round. External automated scheduling is optional and requires separate evidence. Local mocks cannot establish node availability, fees, or latency.
 2. **Credential behavior:** decide the intended error behavior for absent/malformed values; test nonzero Sepolia-key resolution with a synthetic key and unsupported-chain `getDeployerKey` rejection. Keep each test's environment setup explicit.
-3. **Configuration assertions:** consider an independent Sepolia chain-ID expectation, entry-fee/interval checks, and nonzero deployed mock-code checks. Address equality alone would also pass if both returned addresses were zero.
+3. **Configuration assertions:** the pinned fork test now checks Sepolia chain ID and nonempty coordinator/LINK code. Entry-fee/interval and deployed mock-code checks remain conditional follow-ups.
 4. **Accounting depth:** independently reconcile tracked claim balances against the aggregate counter and test conservation across operations. The current handler immediately settles mock requests and re-funds the subscription before settlement; it does not model delayed callbacks or billing depletion.
 5. **Event observability:** add an exact `WinningCredited` event assertion. `WithdrawnWinnings` already has an emitter/winner/amount assertion in `test_WithdrawWinningsClearsClaim_WhenCallerHasClaim`.
 6. **Conditional script support:** if standalone interaction scripts become a supported workflow, test their persistence and failure paths on a persistent local chain. Do not duplicate wrapper tests solely for coverage.
@@ -395,7 +399,7 @@ This repository must not be used to custody real funds without a new threat mode
 
 ## Roadmap
 
-Use this table as a completion framework. Change a status only when the listed evidence exists; empty deployment-record fields above are intentional.
+This table summarizes status; the [pending checklist](records/PENDING_WORK_CHECKLIST.md) owns detailed acceptance criteria. Change a status only when the listed evidence exists; empty deployment-record fields above are intentional.
 
 | Work item                                     | Current status                             | Evidence needed to close                                                                                                                            |
 | --------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -403,12 +407,14 @@ Use this table as a completion framework. Change a status only when the listed e
 | Initial HelperConfig test set                 | Locally tested                             | Four tests pass, within the behavior matrix's stated limits                                                                                         |
 | Reproducible toolchain                        | Pending                                    | Explicit Foundry/Solc/settings baseline used in both local verification and CI                                                                      |
 | Additional verification                       | Proposed                                   | Risk-selected tests from the gaps above, with assertions and reproducible results                                                                   |
-| Sepolia preflight                             | Pending                                    | Dated official configuration checks and onchain subscription/owner/funding checks                                                                   |
-| Sepolia deployment and Automation round       | Not verified                               | Completed deployment record, including fulfillment and withdrawal receipts                                                                          |
+| Sepolia preflight and simulation              | Recorded; refresh before broadcast         | Recheck current configuration, owner, funding, and final deployment simulation                                                                      |
+| Pinned Sepolia fork tests                     | Snapshot checks passed                    | Three tests passed at block `11792671`; fork deployment remains optional and unverified                                                              |
+| Live Sepolia VRF round                        | Not verified                               | Deployment and consumer registration, manual upkeep trigger, real fulfillment, and withdrawal receipts                                              |
+| External automated scheduling                 | Optional / not verified                   | Separate supported-service execution evidence if this extension is chosen                                                                           |
 | Independent security review                   | Not performed in this documentation update | Reviewed commit, threat model, findings, remediation tests, and residual-risk record                                                                |
 | Operational procedure                         | Pending before public operation            | Owner/coordinator policy, funding and stalled-request monitoring, response contacts, and incident procedure reflecting the lack of onchain recovery |
 
-Recommended next milestone: complete Sepolia preflight and record a non-broadcast simulation before any public-network deployment. Keep testnet validation separate from authorization to operate with real funds.
+Recommended next milestone: complete the focused verification and reproducibility work in the [pending checklist](records/PENDING_WORK_CHECKLIST.md), then refresh pre-broadcast checks and simulation before a live Sepolia round. Keep testnet validation separate from authorization to operate with real funds.
 
 ZK, RWA, upgradeability, governance, and mainnet operations are intentionally outside this repository’s current scope.
 

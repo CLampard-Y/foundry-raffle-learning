@@ -1,256 +1,163 @@
 # Project Status and Improvement Roadmap
 
-## 1. Document control
+Updated: **2026-09-28 (Asia/Shanghai)**. Repository/source baseline reviewed: **`01a26a9`**, `test(fork): validate Raffle against pinned Sepolia state`. The worktree was clean before this documentation review.
 
-| Field                                | Current value                                                                          |
-| ------------------------------------ | -------------------------------------------------------------------------------------- |
-| Repository state at evidence capture | `3d9c19e` — `docs: record Sepolia read-only preflight evidence`                        |
-| Source/test evidence baseline        | `7063450` — `chore: configure linting and fix invariant time handling`                 |
-| Latest local verification date       | 2026-09-22                                                                             |
-| Latest Sepolia read-only check       | 2026-09-26 17:21 UTC; block `11787627`                                                 |
-| Latest deployment simulation         | 2026-09-27 05:06 UTC; no broadcast                                                      |
-| Current phase                        | Gates 1–3 and 4A complete; optional Gate 4B fork deployment next                        |
-| Next highest-value work              | Validate deployment on an ephemeral local Sepolia fork                                  |
-| Intended scope                       | Educational and portfolio-oriented testnet project; not a production lottery           |
+## 1. Purpose and ownership
 
-This document uses the following evidence states:
+This roadmap defines the project's scope, milestones, risk decisions and learning outcomes. The authoritative next-task queue is [records/PENDING_WORK_CHECKLIST.md](records/PENDING_WORK_CHECKLIST.md); [records/records.md](records/records.md) preserves dated execution evidence. README is the public summary. Avoid maintaining the same checkbox lists in all four places.
 
-- **VERIFIED** — supported by current repository contents or an executed command.
-- **LOCALLY TESTED** — verified in Foundry’s local EVM with mocks or local deployment.
-- **FORK VALIDATED** — verified against a pinned public-chain snapshot; not live-network evidence.
-- **SEPOLIA VALIDATED** — supported by real public-testnet transactions and a completed live round.
-- **PROPOSED** — recommended future work.
-- **UNVERIFIED** — requires new RPC, fork, deployment, or review evidence.
+The intended outcome is an explainable Solidity/Foundry testnet project with defensible accounting, failure-path tests, reproducible builds and traceable external integration. Production engineering principles guide the work; running an unrestricted real-money lottery is outside scope.
 
-Passing tests do not automatically establish security, live-service availability, or production readiness.
+> 中文：整体方向合理：核心功能 → 安全/测试 → 外部集成 → 项目收尾。调整重点是补足验证深度、把外部服务限制与合约能力分开，并给可选工作设置明确停止条件。
 
-## 2. Executive status
+## 2. Current position and evidence
 
-The project is a locally verified Foundry raffle implementation with pull-payment settlement, stateful accounting tests, and local deployment integration. Sepolia read-only preflight, a non-broadcast deployment simulation, and pinned fork tests are complete. It has not yet been fork-deployed, deployed to Sepolia, or exercised through live VRF and Automation services.
+**Assessment:** local implementation and initial verification are complete; snapshot integration is recorded; the project is in focused verification/reproducibility work before a live testnet round. Optional fork deployment is useful practice, but not automatically the highest-value remaining task.
 
-| Area                                   | Evidence state                            | Status             | Current boundary                                                                                                                                  |
-| -------------------------------------- | ----------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Raffle state machine                   | VERIFIED / LOCALLY TESTED                 | COMPLETE           | `OPEN -> CALCULATING -> OPEN`, entry, upkeep, callback settlement, reset, and multi-round behavior are tested.                                    |
-| Pull-payment remediation               | VERIFIED / LOCALLY TESTED                 | COMPLETE           | Fulfillment credits a claim instead of pushing ETH; a rejecting winner cannot block round finalization.                                           |
-| Withdrawal behavior                    | VERIFIED / LOCALLY TESTED                 | COMPLETE           | Successful withdrawal, failed transfer preservation, double withdrawal, and reentrancy behavior are covered.                                      |
-| Cross-round accounting                 | VERIFIED / LOCALLY TESTED                 | COMPLETE           | Reserved previous claims are excluded from the next prize.                                                                                        |
-| Stateful invariant                     | VERIFIED / LOCALLY TESTED                 | COMPLETE           | `totalOutstandingClaims <= address(raffle).balance` passes across handler-generated actions.                                                      |
-| HelperConfig tests                     | VERIFIED / LOCALLY TESTED                 | COMPLETE           | Four tests cover unsupported lookup, local cache reuse, stored Sepolia values, and a zero deployer key.                                           |
-| Local deployment integration           | VERIFIED / LOCALLY TESTED                 | COMPLETE           | Local mocks, subscription creation/funding, Raffle deployment, ownership, and consumer registration are tested.                                   |
-| Local acceptance suite                 | VERIFIED                                  | COMPLETE           | 38 tests pass; build and formatting pass in the recorded verification run.                                                                        |
-| Sepolia configuration                  | LOCALLY TESTED; RPC CHECKED               | PREFLIGHT COMPLETE | Coordinator/LINK code and subscription state were checked at Sepolia block `11787627`; live VRF/Automation remain unverified.                    |
-| Deployment script simulation          | VERIFIED / NON-BROADCAST SIMULATION       | COMPLETE           | At commit `3d9c19e`, Raffle creation and consumer registration simulated successfully; no public transaction or receipt exists.                  |
-| Fork test/deployment                   | FORK TESTED; DEPLOYMENT UNVERIFIED         | 4A COMPLETE; 4B OPEN | Three tests passed at Sepolia block `11792671`; ephemeral deployment and live VRF/Automation remain unverified.                                  |
-| Sepolia deployment                     | UNVERIFIED                                | PLANNED            | No public deployment receipt, address, or transaction evidence is recorded.                                                                       |
-| Automation registration/live execution | UNVERIFIED                                | PLANNED            | No upkeep ID or live execution evidence is recorded.                                                                                              |
-| Testing documentation                  | UNVERIFIED                                | PENDING            | `TESTING.md` has not yet been created.                                                                                                            |
-| Security notes                         | UNVERIFIED                                | PENDING            | `SECURITY_NOTES.md` has not yet been created; no formal audit is claimed.                                                                         |
-| Production readiness                   | NOT CLAIMED                               | OUT OF SCOPE       | This repository is not approved for real funds or production lottery operation.                                                                   |
+| Area | Evidence and boundary | State |
+| --- | --- | --- |
+| Raffle and pull payment | `OPEN → CALCULATING → OPEN`; fulfillment credits claims; separate CEI withdrawal; rejecting receivers no longer block settlement through payout | Implemented / locally tested |
+| Accounting | Previous claims excluded from later prizes; individual withdrawal cases tested | Locally tested; repeated-winner and delayed-round depth pending |
+| Stateful invariant | `totalOutstandingClaims <= balance`; 128 × 64 actions | Locally tested; independent conservation/reconciliation still needed |
+| Configuration/deployment | Four HelperConfig tests; integrated local deployment/ownership/consumer test | Locally tested; toolchain pinning and some signer cases remain |
+| Sepolia preflight | September 26 snapshot at `11787627`; 18 LINK, expected owner, two historical consumers, unresolved pending requests | Recorded historical evidence; refresh before broadcast |
+| Deployment simulation | September 27 at source `3d9c19e`: CREATE and `addConsumer` succeeded | Non-broadcast only |
+| Fork tests | September 28, block `11792671`, 3 passed | Snapshot config/subscription/constructor checks only |
+| Persistent fork deployment | No recorded script broadcast/receipt postconditions | Optional pending |
+| Public deployment / live VRF | No recorded successful current-project deployment and live round | Pending |
+| Automated scheduling | No recorded live trigger; legacy Automation sunset notice applies | Optional; not a closure gate |
+| Security review | Tests and code inspection exist; no formal audit is claimed | Focused review/evidence notes pending |
 
-## 3. What is complete
+### Verification ledger
 
-### Contract and test work
+Fresh checks for this review at `01a26a9`, 2026-09-28:
 
-- Pull-payment settlement is implemented in `src/Raffle.sol`.
-- Winner claims are credited during fulfillment and withdrawn separately.
-- Checks-effects-interactions ordering is used in `withdrawWinnings()`.
-- Reserved claims are deducted before calculating a later round’s prize.
-- Unit, negative-path, fuzz, integration, and stateful invariant tests are present.
-- The local invariant runs with 128 runs and depth 64, producing 8,192 handler calls with zero reverts in the recorded run.
+| Command | Result |
+| --- | --- |
+| `forge fmt --check` | Passed |
+| `forge build --sizes` | Passed; existing build cache reused |
+| `forge test --no-match-path 'test/fork/**'` | 38 passed, 0 failed, 0 skipped: 32 Raffle, 4 HelperConfig, 1 deployment, 1 invariant |
+| Invariant within the local run | 128 runs, depth 64, 8,192 handler calls, zero reverts |
+| `forge --version` | 1.7.1, commit `4072e48705af9d93e3c0f6e29e93b5e9a40caed8` |
 
-### Deployment configuration and local integration
+Commands used `/home/ZKdev/.foundry/bin/forge` on this server. No fork RPC check, broadcast or coverage rerun was performed in this planning review. The recorded September 22 coverage was 81.75% aggregate lines / 89.29% branches, with 100% reported Raffle execution coverage; that is historical, not a new full-suite measurement. The September 28 fork result is also a separate recorded run, not part of the 38 local tests above.
 
-- `HelperConfig` resolves local Anvil and Sepolia configuration paths.
-- The network-specific deployer key is passed consistently through local subscription setup, Raffle deployment, and consumer registration.
-- The local integration test verifies deployer identity, subscription ownership, Raffle ownership, and consumer registration.
-- The Sepolia configuration tests verify stored values only; they do not query Sepolia.
-- Separate read-only RPC checks confirmed the configured coordinator/LINK code, subscription owner, 18 LINK balance, and two historical consumers. [Gate 2 evidence and reuse decision](records/records.md#step5minimum-acceptable-stage-verify-existing-consumer-of-the-subscription) record the pending-request caveat.
+CI currently uses an unpinned Foundry toolchain and `forge test -vvv`. The fork suite skips when its RPC variable is absent. Compiler/EVM/optimizer choices should be explicit before creating deployment artifacts. Known compiler warnings were recorded earlier; a cached build is not a fresh compiler-warning audit.
 
-### Current local evidence
+## 3. Review of the previous plan
 
-The recorded 2026-09-22 verification used Foundry `1.7.1` and Solc `0.8.35`:
+| Finding | Why it matters | Adjustment |
+| --- | --- | --- |
+| Deployment dominated the remaining queue | Solvency alone can pass while individual claims are incorrectly lost | Add bounded independent accounting verification before the live milestone |
+| Callback scale was not an explicit task | Fulfillment clears an uncapped player array under a fixed callback gas limit; the safe range is not established | Characterize gas-limited success and failure; change design only if evidence requires it |
+| Automation was part of the only live-completion definition | Legacy service availability is an external dependency that has changed | Separate manual-triggered live VRF from optional external scheduling |
+| Fork testing and fork deployment shared one evidence label | Constructor/config checks do not establish signed script execution and registration | Use B1 snapshot and optional B2 deployment |
+| Documentation files were prerequisites for evidence levels | A result is evidence even before a new Markdown file exists | Separate execution evidence from documentation closure; permit compact existing sections |
+| Closed preflight boxes implied durable readiness | Funding, owners, consumers, nonces and service support change | Preserve dated checks and add a fresh pre-broadcast gate |
+| Roadmap duplicated the operational checklist | Divergent copies were already stale | Keep milestones here and detailed tasks in the pending checklist |
+| “Missing key” was treated as tested | Actual HelperConfig test sets key to zero; missing/malformed inputs are distinct | Correct the historical test checklist; don't claim nonexistent tests |
 
-| Command                           | Result                                                                                                                  |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `forge fmt --check`               | Passed                                                                                                                  |
-| `forge build --sizes`             | Passed; the `block.timestamp` lint is intentionally excluded because the raffle uses timestamp-based elapsed-time logic |
-| `forge test -vv`                  | 38 passed, 0 failed, 0 skipped                                                                                          |
-| `forge coverage --report summary` | Passed; aggregate 81.75% lines, 80.95% statements, 89.29% branches, 75.00% functions                                    |
+This is a risk-based planning review, not independent security certification. Callback capacity is an open validation question, not a reproduced exploit in this review.
 
-Coverage is diagnostic evidence, not a correctness or security certificate. Reported `Raffle.sol` execution coverage is 100% in the recorded run.
+## 4. Milestones and completion boundaries
 
-The normal build excludes the intentional `block-timestamp` lint. A forced recompilation still reports the dependency `EnumerableSet.at` identifier warning and the invariant handler's `actorsLength` naming collision; these are reviewed compiler warnings, not test failures.
+| Milestone | Deliverable | Exit criterion | Status / task mapping |
+| --- | --- | --- | --- |
+| M0 — Core implementation | Raffle state machine, subscription scripts, pull-payment settlement | Core flow and payout regression tests | Complete locally |
+| M1 — Verification and reproducibility | Explicit build/CI baseline, stronger accounting tests, callback and privilege characterization | Required local tests pass; material findings addressed or explicitly bounded for this testnet scope | In progress: T1–T3 |
+| M2 — External compatibility | Pinned fork evidence; fresh configuration/owner/funding check; reviewed deployment simulation | Snapshot and current assumptions recorded separately | B1 recorded; T4 refresh pending; B2 optional |
+| M3 — Live integration | One real Sepolia VRF round and withdrawal with manual upkeep trigger | Public receipts tie final source/config to successful callback and accounting | Pending: Gate 5A |
+| M4 — Explainable closure | Concise testing/security evidence, residual risks and operational procedure | User can explain major design/failure paths; documentation matches final revision | Start alongside M1, finish through T5 |
+| M5 — Optional automation | A supported external service triggers a live round | Separate scheduler execution evidence and operational cost justified | Conditional: Gate 5B |
 
-## 4. Historical development stages
+M1 and M2 are not rigidly sequential: one bounded fork deployment can continue while focused tests are added. Finish M1 and fresh T4 checks before M3. A decision to end at local/fork evidence because external validation is blocked is valid educational closure when clearly labelled; it is not a live deployment claim.
 
-This table summarizes repository history; it does not claim anything that was only present on an unavailable server.
+### Why manual upkeep is the current default
 
-| Stage                                              | Result                                                                                    | Status                                  |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------- |
-| Project foundation and CI                          | Foundry project, dependencies, and CI workflow                                            | COMPLETE                                |
-| Core Raffle, VRF, and Automation-compatible upkeep | State machine, request/callback flow, and upkeep checks                                   | COMPLETE                                |
-| Portable configuration                             | `HelperConfig`, local mocks, and Sepolia constants                                        | COMPLETE locally; Sepolia read-only checked |
-| Subscription/deployment flow                       | Creation, funding, deployment, and consumer registration                                  | COMPLETE locally                        |
-| Failure characterization                           | Rejecting-winner callback failure identified and reproduced                               | COMPLETE                                |
-| Pull-payment remediation                           | Callback no longer pushes ETH to the winner                                               | COMPLETE and locally tested             |
-| Withdrawal and accounting verification             | Withdrawal failure, duplicate withdrawal, reentrancy, multi-round reserves, and invariant | COMPLETE and locally tested             |
-| HelperConfig safety coverage                       | Four focused configuration tests                                                          | COMPLETE and locally tested             |
-| Public-network validation                          | Sepolia read-only preflight; fork and live deployment still pending                       | PREFLIGHT COMPLETE; DEPLOYMENT PENDING  |
-| Final testing/security documentation               | `TESTING.md` and `SECURITY_NOTES.md`                                                      | PENDING                                 |
+The official [Chainlink Automation page](https://docs.chain.link/chainlink-automation/introduction), checked September 28, 2026, lists v2.1 testnet sunset on June 24, 2026 and mainnet sunset on July 31, 2026. It directs users toward CRE. The recommendation here is to validate the existing contract through a manual call to permissionless `performUpkeep`, then observe real VRF fulfillment. No scheduler integration is needed for that contract path.
 
-## 5. Immediate roadmap
+CRE adoption would introduce a separate external workflow and maintenance commitment. Evaluate it only after M3 if automation remains a meaningful goal. “Automation-compatible functions” and “live automated operation” must remain separate claims.
 
-### Gate 1 — Repository and evidence closure
+### Evidence vocabulary
 
-Before using a public network:
+- **IMPLEMENTED:** code exists; no implied execution evidence.
+- **A — LOCALLY TESTED:** named local checks passed at an identified revision, within their stated model.
+- **B1 — FORK SNAPSHOT:** pinned external state assertions passed without skips.
+- **B2 — FORK DEPLOYMENT:** local fork transactions and script postconditions established.
+- **C1 — LIVE VRF ROUND:** deployment through real fulfillment/withdrawal has public receipts; trigger mode recorded.
+- **C2 — AUTOMATED EXECUTION:** separate evidence of an external scheduler triggering the round.
+- **REVIEWED:** specify reviewer, revision, scope, findings and limitations; not equivalent to audited or secure.
+- **PROPOSED / UNVERIFIED:** planned work or a claim lacking the required evidence.
 
-- [x] Update all status documents to the current repository/evidence baseline.
-- [x] Re-run and record `forge fmt --check`, `forge build --sizes`, `forge test -vv`, and `forge coverage --report summary`.
-- [x] Review remaining compiler/lint warnings and explicitly accept or resolve them.
-- [x] Record the residual security findings listed in Section 7.
-- [x] Review documentation changes and establish a clean, reviewable commit boundary.
+These labels are not a cumulative safety rating. Coverage and test counts measure parts of verification, not security completeness.
 
-Primary checklist: [`PENDING_WORK_CHECKLIST.md`](records/PENDING_WORK_CHECKLIST.md).
+## 5. Required standard, conditional work and non-goals
 
-### Gate 2 — Sepolia read-only preflight
+**Required for the planned controlled live demo:** correct claims/accounting, guarded round transitions, callback evidence at the supported scale, tested trust boundary, reproducible artifacts, current signer/subscription assumptions, partial-deployment handling, one traceable real VRF round, and a short response procedure for stalls.
 
-- [x] Configure `SEPOLIA_RPC_URL`; do not commit `.env` or secrets.
-- [x] Confirm RPC chain ID `11155111`.
-- [x] Confirm deployed bytecode at the configured VRF coordinator and LINK token.
-- [x] Recheck coordinator, LINK token, gas lane/key hash, billing mode, callback limit, and supported APIs against current official Chainlink documentation.
-- [x] Query the configured subscription:
-  - it exists;
-  - owner matches the planned deployer;
-  - LINK balance is sufficient because `nativePayment: false` is configured;
-  - consumers and subscription status are understood.
-- [x] Decide whether to reuse the hard-coded subscription or create a dedicated project subscription.
+**Before any broader public operation:** revisit uncapped entry/callback capacity, independent security review, privileged-key policy, monitoring and loss/recovery assumptions. Documenting a risk is not the same as enforcing an onchain limit. Testnet assets limit economic exposure; they do not eliminate failure modes.
 
-**Gate 2 evidence:** [dated Sepolia RPC results and reuse decision](records/records.md#step5minimum-acceptable-stage-verify-existing-consumer-of-the-subscription). Historical requests were pending at the recorded block; recheck the subscription before a live transaction.
+**Conditional rather than automatic work:** standalone funding/interaction script support; absent/malformed key and other extra configuration tests when that workflow is changed; forced ETH and cross-function malicious receiver scenarios; request-ID tracking; alternate withdrawal recipients; supported external scheduling. Select each against a concrete risk or use case, not coverage percentage.
 
-Do not broadcast if coordinator, subscription ownership, funding, or LINK billing assumptions remain uncertain.
+**Separate design scope:** timeout/refund/retry behavior. Current [VRF security guidance](https://docs.chain.link/vrf/v2-5/security) cautions against re-request/cancellation and explains that failed callbacks are not retried. Any recovery design must address fairness, late callbacks and claim liabilities; adding a generic retry is not an acceptable shortcut.
 
-### Gate 3 — Non-broadcast deployment simulation
+**Outside this repository milestone:** proxy upgrades, governance frameworks, production lottery operations, generalized deployment infrastructure, ZK circuits, RWA tokenization, custom cryptography and compliance architecture. These require separate requirements and threat models.
 
-- [x] Configure a disposable `SEPOLIA_PRIVATE_KEY` only for signer-dependent checks.
-- [x] Run `DeployRaffle` without `--broadcast`.
-- [x] Inspect the sender, constructor parameters, subscription ID, coordinator, and consumer-registration call.
-- [x] Confirm no simulation revert occurred; resolve any failure before a future broadcast.
+## 6. Risk and decision register
 
-**Gate 3 evidence:** [2026-09-27 simulation record](records/records.md) at commit `3d9c19e`: two successful simulated transactions (Raffle creation and `addConsumer`), no unexpected subscription creation or funding, and no public receipts. The Raffle address in the record is simulated only.
+| ID | Evidence / risk | Current handling and reassessment trigger |
+| --- | --- | --- |
+| R1 | Rejecting winner previously blocked push-payment settlement | Mitigated locally by pull payments and regression tests; preserve coverage |
+| R2 | Outstanding claims may be solvent without correct individual allocation | T2 adds expected per-actor claims, reconciliation and conservation; current inequality remains useful but incomplete |
+| R3 | Missing or failed fulfillment leaves `CALCULATING`; no recovery | T3 characterizes failure, T4 defines stop/inspect response; no new entry/duplicate upkeep while pending; recovery redesign separate |
+| R4 | Uncapped player array is cleared under fixed callback gas | T3 measures chosen-build behavior; if failure is found, reproduce and decide a minimal fix; demo-size intent is not enforcement |
+| R5 | Inherited `setCoordinator` callable by owner or current coordinator | T3 tests boundary; no migration during pending demo request; immutable subscription may not suit a new coordinator |
+| R6 | Callback ignores request ID/state validation and assumes a nonempty word array | Trusted coordinator + one request at a time is the current model; revisit before adding concurrent requests, migration or recovery |
+| R7 | Permanently rejecting winner cannot withdraw its own claim | Accepted limitation for this testnet milestone; claim remains reserved and later rounds proceed; alternate recipient conditional |
+| R8 | Shared static subscription includes historical pending requests | Previous reuse decision preserved; T4 refreshes funding/owner/consumer state and budget; isolate if activity cannot be bounded |
+| R9 | Deployment and consumer registration are separate transactions | T4/T5A handle partial success; do not enter until membership is confirmed |
+| R10 | Fork tests can skip silently when RPC is absent | T1 separates test lanes and requires explicit non-skipped fork evidence |
+| R11 | Toolchain/build settings not pinned consistently | T1 establishes intended compiler/Foundry/settings before deployment |
+| R12 | Legacy Automation sunset and no live scheduler evidence | Manual-triggered C1 is default; supported automation is conditional C2 |
+| R13 | Current invariant tops up subscription and settles immediately | Bound the model; T2 adds delayed-round regression; don't claim billing/latency coverage |
+| R14 | Notes and README lag execution evidence | T5 reconciles summaries; dated records remain evidence, not automatically current truth |
 
-### Gate 4 — Optional Sepolia fork validation
+Official addresses/API reference for T4: [VRF supported networks](https://docs.chain.link/vrf/v2-5/supported-networks). This documentation review does not refresh the actual subscription state or establish node availability.
 
-Fork validation is recommended but not mandatory.
+## 7. Learning outcomes and stopping rule
 
-#### Fork test
+Each milestone should leave one useful artifact and an explanation the user can give independently:
 
-- [x] Pin a Sepolia fork block.
-- [x] Validate copied coordinator/LINK code and subscription state.
-- [x] Validate configuration and constructor compatibility.
-- [x] Do not call manually simulated callbacks “live VRF fulfillment.”
+| Work | Observable learning evidence | Transfer to later Solidity / ZK / RWA work |
+| --- | --- | --- |
+| T2 accounting | Explain ghost totals; reproduce a lost-claim fault; reconcile individual claims and contract balance | Asset/liability conservation and independent reference models |
+| T3 callback/privileges | Trace rollback versus callback failure; test allowed/forbidden callers; explain gas bounds | Async oracle/verifier boundaries, access control and liveness reasoning |
+| M2/M3 integration | Explain snapshot versus live behavior; inspect receipts and partial deployment | Reproducible deployments and separating onchain evidence from external assumptions |
+| M4 closure | Explain trust model, residual risks and one incident response without reading AI prose | Reviewable design decisions and technical communication |
 
-**Gate 4A evidence:** [fork test record](records/records.md#step-3-sepolia-fork-test-gate-4a), block `11792671`; 3 passed, 0 failed, 0 skipped (2026-09-28 UTC). Gate 4B remains open.
+These are transferable foundations, not evidence that a raffle validates reserves, legal ownership or ZK soundness. Later projects need their own invariants and offchain/proof trust models.
 
-#### Ephemeral fork deployment
+Use focused, reviewable changes: write expected behavior and a counterexample, implement a minimal test/change, run relevant checks, and record the insight. Reserve independent challenge for meaningful contract changes; avoid turning every documentation edit into a full audit cycle.
 
-- [ ] Start an Anvil fork and confirm its chain ID. If it reports `31337`, `HelperConfig` selects local mocks instead of Sepolia configuration.
-- [ ] Fund the fork deployment account with fork ETH.
-- [ ] Use the subscription owner, or explicitly document owner impersonation used only inside the fork.
-- [ ] Broadcast only to the local fork and record the fork block, chain ID, command, and result.
+Finish this repository when required local hardening and the chosen integration milestone have evidence, the user can explain the design, and residual limits are explicit. Do not indefinitely expand tests or optional services. Choose a separate next project only then; no fixed weekly-hours or career deadline is assumed.
 
-A fork cannot prove live VRF nodes, billing latency, Automation monitoring, Automation consensus, or public transaction receipts.
+## 8. Development history and evidence links
 
-### Gate 5 — Live Sepolia smoke test
+| Period / commit | Established progress |
+| --- | --- |
+| July–August; `d10503d` | Core flow and consistent network-specific deployment identity |
+| `c19b75f` through `4c7c872` | Pull-payment remediation, withdrawal/reentrancy and multi-round reserve regressions |
+| `c640ed7`, `d4edba4` | Handler followed by executable solvency invariant |
+| `258b41b`, `f568559` | Separated fulfillment/withdrawal/request-consumption test responsibilities |
+| `a2655d9`, `7063450` | HelperConfig tests and lint/invariant timestamp handling |
+| `3d9c19e`, `49490b4` | Recorded Sepolia preflight and non-broadcast simulation |
+| `01a26a9` | Three pinned Sepolia fork tests and recorded results |
+| 2026-09-28 planning review | Current local tests rerun; checklist/roadmap separated; accounting, callback, reproducibility and automation scope revised |
 
-- [ ] Confirm the currently supported Chainlink Automation registration path; do not assume legacy Automation availability.
-- [ ] Deploy with a disposable funded testnet account.
-- [ ] Confirm Raffle consumer registration and subscription funding.
-- [ ] Register Automation if required and record the upkeep ID.
-- [ ] Enter the raffle.
-- [ ] Observe upkeep execution and real VRF fulfillment.
-- [ ] Confirm claim crediting and successful withdrawal.
-- [ ] Record chain ID, commit, toolchain, addresses, blocks, transaction hashes, subscription/upkeep IDs, and explorer links.
-- [ ] Re-run local regression tests after any code change caused by live integration.
+Relevant implementation: [Raffle](src/Raffle.sol), [deployment](script/DeployRaffle.s.sol), [configuration](script/HelperConfig.s.sol), [interactions](script/Interactions.s.sol).
 
-## 6. Final documentation closure
+Relevant tests: [Raffle unit/fuzz](test/unit/RaffleTest.t.sol), [HelperConfig](test/unit/HelperConfigTest.t.sol), [local deployment](test/integration/DeployRaffleTest.t.sol), [invariant](test/invariant/RaffleInvariantTest.t.sol), [fork](test/fork/SepoliaForkTest.t.sol).
 
-### `TESTING.md`
+Execution evidence: [records](records/records.md). Next tasks: [pending checklist](records/PENDING_WORK_CHECKLIST.md). Historical test planning: [TEST_CHECKLIST.md](TEST_CHECKLIST.md). Build/test workflow: [CI](.github/workflows/test.yml).
 
-- [ ] Document unit, negative-path, fuzz, integration, invariant, fork, and live smoke tests.
-- [ ] Record commands, toolchain versions, test counts, coverage, invariant configuration, dates, and commits.
-- [ ] Explain what each important test proves and its boundary.
-- [ ] Distinguish local mock, fork, and live Chainlink evidence.
-- [ ] Include a reproducible evidence table.
-
-### `SECURITY_NOTES.md`
-
-- [ ] Document assets, actors, trust boundaries, state transitions, and privileged roles.
-- [ ] Describe the rejecting-winner defect and pull-payment remediation.
-- [ ] Link security properties to regression and invariant tests.
-- [ ] Record residual risks and operational assumptions.
-- [ ] State clearly that the document is not a formal audit, formal verification, or production-readiness approval.
-
-### Documentation closure criteria
-
-- [ ] Link both documents from `README.md`.
-- [ ] Update this roadmap, the README deployment record, and [`PENDING_WORK_CHECKLIST.md`](records/PENDING_WORK_CHECKLIST.md).
-- [ ] Preserve no private key, `.env`, or sensitive RPC/broadcast material.
-
-## 7. Risk and unknown register
-
-| ID   | Risk / unknown                                                              | Status                        | Handling                                                                                                        |
-| ---- | --------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| R-01 | A rejecting winner previously blocked settlement                            | MITIGATED LOCALLY             | Pull payment and regression tests prevent callback payout failure from blocking a round.                        |
-| R-02 | Missing VRF fulfillment can leave the raffle in `CALCULATING`               | OPEN                          | No timeout, retry, cancellation, or recovery path exists; future hardening requires a separate design decision. |
-| R-03 | Coordinator can be changed through inherited privileged behavior            | ACCEPTED TRUST ASSUMPTION     | Owner/coordinator custody must be documented and controlled.                                                    |
-| R-04 | Callback ignores local request-ID validation and assumes valid random words | ACCEPTED WITHIN CURRENT MODEL | Current design relies on the configured coordinator and one-request-at-a-time state machine.                    |
-| R-05 | A permanently rejecting winner cannot withdraw its own claim                | DESIGN LIMITATION             | Later rounds remain live, but no alternate recipient/claim-transfer path exists.                                |
-| R-06 | Sepolia constants and hard-coded subscription may become stale or unusable  | OPEN; PREFLIGHT CHECKED       | Read-only checks passed at block `11787627`; recheck before broadcast. Historical requests remain pending.       |
-| R-07 | Automation registration and live execution are unverified                   | OPEN                          | Confirm the current supported Sepolia path and complete a live round.                                           |
-| R-08 | Toolchain/compiler settings are not intentionally pinned                    | OPEN                          | Document or pin the intended toolchain before relying on bytecode/gas comparisons.                              |
-| R-09 | Historical notes or unavailable-server changes may be incomplete            | UNKNOWN                       | Treat current repository evidence as authoritative; do not infer lost changes.                                  |
-
-## 8. Completion model
-
-| Level                 | Completion claim                                                              | Evidence required                                                                               |
-| --------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| A — Locally verified  | Educational contract and local verification are complete                      | Gates 1 and 6; 38-test local evidence and accurate documentation                                |
-| B — Fork validated    | Public-chain snapshot compatibility and ephemeral deployment are demonstrated | Gate 4 evidence, including pinned block and limitations                                         |
-| C — Sepolia validated | Real testnet integration is demonstrated                                      | Gate 5 plus Gate 6 evidence: deployment, consumer, Automation, VRF fulfillment, and withdrawal  |
-| D — Production-ready  | Not a target of this repository                                               | Would require new scope, threat model, operations, independent review, and additional hardening |
-
-A successful fork or testnet run does not establish production readiness or security-audit status.
-
-## 9. Evidence index
-
-- Core contract: [`src/Raffle.sol`](src/Raffle.sol)
-- Deployment orchestration: [`script/DeployRaffle.s.sol`](script/DeployRaffle.s.sol)
-- Network configuration: [`script/HelperConfig.s.sol`](script/HelperConfig.s.sol)
-- Interaction scripts: [`script/Interactions.s.sol`](script/Interactions.s.sol)
-- Raffle tests: [`test/unit/RaffleTest.t.sol`](test/unit/RaffleTest.t.sol)
-- HelperConfig tests: [`test/unit/HelperConfigTest.t.sol`](test/unit/HelperConfigTest.t.sol)
-- Deployment integration test: [`test/integration/DeployRaffleTest.t.sol`](test/integration/DeployRaffleTest.t.sol)
-- Pinned Sepolia fork test: [`test/fork/SepoliaForkTest.t.sol`](test/fork/SepoliaForkTest.t.sol)
-- Stateful invariant: [`test/invariant/RaffleInvariantTest.t.sol`](test/invariant/RaffleInvariantTest.t.sol)
-- Test checklist: [`TEST_CHECKLIST.md`](TEST_CHECKLIST.md)
-- Pending work checklist: [`PENDING_WORK_CHECKLIST.md`](records/PENDING_WORK_CHECKLIST.md)
-- Main documentation: [`README.md`](README.md)
-- CI workflow: [`.github/workflows/test.yml`](.github/workflows/test.yml)
-
-`TESTING.md` and `SECURITY_NOTES.md` are not yet present and remain final documentation tasks.
-
-## 10. Tracking log
-
-| Date                     | Item                                     | Previous state        | New state                    | Evidence                                                         |
-| ------------------------ | ---------------------------------------- | --------------------- | ---------------------------- | ---------------------------------------------------------------- |
-| 2026-08-02               | Network-specific broadcaster refactor    | In progress           | COMPLETE                     | `d10503d`; local deployment identity integration test            |
-| 2026-08-16               | Repository recovery                      | Context incomplete    | COMPLETE                     | Git/history review and local verification                        |
-| 2026-08-19 to 2026-09-01 | Pull-payment and accounting work         | Failure characterized | IMPLEMENTED / LOCALLY TESTED | Pull payment, withdrawal tests, multi-round tests, and invariant |
-| 2026-09-16 to 2026-09-19 | HelperConfig safety coverage             | Proposed              | COMPLETE / LOCALLY TESTED    | `a2655d9`; four tests pass                                       |
-| 2026-09-19               | README and verification evidence refresh | Stale documentation   | UPDATED                      | `bcbbe3b`; current local evidence recorded                       |
-| 2026-09-20               | Roadmap rename and status correction     | Stale roadmap         | IN PROGRESS                  | This document; fork and Sepolia evidence remained pending        |
-| 2026-09-26 UTC           | Sepolia read-only preflight              | Unverified external state | PREFLIGHT COMPLETE       | [RPC evidence at block `11787627`](records/records.md#step5minimum-acceptable-stage-verify-existing-consumer-of-the-subscription); Gate 3 pending |
-| 2026-09-27 UTC           | Non-broadcast deployment simulation      | Gate 3 pending        | SIMULATION COMPLETE          | [Sender, configuration, and two-call trace](records/records.md); commit `3d9c19e`; zero receipts |
-| 2026-09-28 UTC           | Pinned Sepolia fork tests                | Gate 4A pending       | FORK TESTED                 | [Block `11792671`; 3 passed, 0 skipped](records/records.md#step-3-sepolia-fork-test-gate-4a); Gate 4B pending |
-
-When updating this roadmap, link each status change to a commit, command output, test result, fork block, transaction, or review record. Never promote `IMPLEMENTED` directly to `SECURITY-REVIEWED`, `FORK VALIDATED`, or `DEPLOYED` without the corresponding evidence.
+For future updates, change milestone state here, task state in the pending checklist, and dated evidence in records. Do not relabel proposed tests, old RPC snapshots or simulations as new live verification.
