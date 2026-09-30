@@ -460,3 +460,11 @@ Observed in the fresh checkout:
 - Only three reviewed OpenZeppelin warnings.
 - Formatting passed.
 - Local tests and coverage each ran 38 tests: 38 passed/0 failed/0 skipped.
+
+## 9.30
+### T2 - Independent accounting verification
+#### Step 1: Add a regression where the same winner wins twice before withdrawing
+- Two wins by `PLAYER` accumulate into one claim; one withdrawal pays the sum and clears the claim and outstanding liabilities.
+- Verification: focused regression passed; RPC-free suite: 40 passed / 0 failed / 0 skipped; test-file formatting and whitespace checks passed.
+#### Step 2: Add delayed settlement
+Old winner claims winnings while second round is pending (`CALCULATING`), the claim succeeds without changing the new prize and raffle state.

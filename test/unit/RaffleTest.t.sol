@@ -754,6 +754,139 @@ contract RaffleTest is Test {
         assertEq(address(raffle).balance, firstRoundPrize);
     }
 
+    /**
+     * @dev Withdrawing an old claim while the next round is pending preserves its prize.
+     * The modifier enters PLAYER in round 1 and advances time to make upkeep eligible.
+     */
+    function test_OldClaimWithdrawalPreservesPrize_WhileNextRoundCalculating() public raffleEnteredAndTimePassed {
+        // Arrange: fund the mock subscription for two fulfillments.
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fundSubscription(subscriptionId, 100 ether);
+
+        // Round 1: settle PLAYER's prize and leave it unclaimed.
+        uint256 firstRequestId = _performUpkeepAndGetRequestId();
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(firstRequestId, address(raffle));
+
+        uint256 outstandingClaimsAfterFirstSettlement = raffle.getTotalOutstandingClaims();
+        uint256 oldWinnerClaimAfterFirstSettlement = raffle.getClaimableWinnings(PLAYER);
+
+        assertEq(outstandingClaimsAfterFirstSettlement, entranceFee);
+        assertEq(oldWinnerClaimAfterFirstSettlement, entranceFee);
+
+        // Round 2: enter a different player and request randomness without fulfilling.
+        address secondRoundPlayer = makeAddr("secondRoundPlayer");
+        uint256 secondRoundDeposit = 2 * entranceFee;
+        hoax(secondRoundPlayer, STARTING_USER_BALANCE);
+        raffle.enterRaffle{value: secondRoundDeposit}();
+
+        vm.warp(block.timestamp + interval);
+        uint256 secondRequestId = _performUpkeepAndGetRequestId();
+
+        // Checkpoint: round 2 is pending, and only the old prize is reserved.
+        uint256 raffleBalanceBeforeWithdrawal = address(raffle).balance;
+
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING));
+        assertEq(raffleBalanceBeforeWithdrawal, entranceFee + secondRoundDeposit);
+        assertEq(raffle.getTotalOutstandingClaims(), entranceFee);
+        assertEq(raffle.getClaimableWinnings(PLAYER), entranceFee);
+        assertEq(raffle.getClaimableWinnings(secondRoundPlayer), 0);
+
+        // Act: withdraw the old prize while round 2 is still CALCULATING.
+        uint256 oldWinnerBalanceBeforeWithdrawal = PLAYER.balance;
+
+        vm.prank(PLAYER);
+        raffle.withdrawWinnings();
+
+        uint256 raffleBalanceAfterWithdrawal = address(raffle).balance;
+        uint256 oldWinnerBalanceAfterWithdrawal = PLAYER.balance;
+        uint256 oldWinnerClaimAfterWithdrawal = raffle.getClaimableWinnings(PLAYER);
+
+        // Assert: the old debt is paid, and the second-round deposit remains intact.
+        assertEq(raffleBalanceAfterWithdrawal, secondRoundDeposit);
+        assertEq(raffle.getTotalOutstandingClaims(), 0);
+        assertEq(raffle.getClaimableWinnings(PLAYER), 0);
+        assertEq(raffle.getClaimableWinnings(secondRoundPlayer), 0);
+        assertEq(raffleBalanceBeforeWithdrawal - raffleBalanceAfterWithdrawal, entranceFee);
+        assertEq(oldWinnerBalanceAfterWithdrawal - oldWinnerBalanceBeforeWithdrawal, entranceFee);
+        assertEq(oldWinnerClaimAfterWithdrawal, 0);
+
+        // Assert: withdrawing does not change the pending round or its participants.
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING));
+        assertEq(raffle.getPlayersLength(), 1);
+        assertEq(raffle.getPlayerByIndex(0), secondRoundPlayer);
+
+        // Pending-round guards: neither entry nor a duplicate request is allowed.
+        vm.prank(PLAYER);
+        vm.expectRevert(Raffle.Raffle__RaffleNotOpen.selector);
+        raffle.enterRaffle{value: entranceFee}();
+
+        vm.prank(PLAYER);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Raffle.Raffle__UpkeepNotNeeded.selector,
+                secondRoundDeposit, // balance
+                1, // players length
+                Raffle.RaffleState.CALCULATING // state
+            )
+        );
+        raffle.performUpkeep("");
+
+        // Round 2: fulfill the saved request and credit only the second-round deposit.
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(secondRequestId, address(raffle));
+
+        // Assert: round 2 finalized with the expected winner.
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
+        assertEq(raffle.getRecentWinner(), secondRoundPlayer);
+        assertEq(raffle.getPlayersLength(), 0);
+
+        // Assert: the new claim is unchanged, and the old claim stays cleared.
+        assertEq(raffle.getTotalOutstandingClaims(), secondRoundDeposit);
+        assertEq(raffle.getClaimableWinnings(PLAYER), 0);
+        assertEq(raffle.getClaimableWinnings(secondRoundPlayer), secondRoundDeposit);
+        assertEq(address(raffle).balance, secondRoundDeposit);
+    }
+
+    /**
+     * @dev Two wins by the same player accumulate into one claim paid by one withdrawal.
+     * The modifier enters PLAYER in round 1 and advances time to make upkeep eligible.
+     */
+    function test_WithdrawWinningsAccumulatesClaim_WhenWinnerWinsTwice() public raffleEnteredAndTimePassed {
+        // Arrange: fund the mock subscription for two fulfillments.
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fundSubscription(subscriptionId, 100 ether);
+
+        // Round 1: settle PLAYER's prize without withdrawing it.
+        uint256 firstRequestId = _performUpkeepAndGetRequestId();
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(firstRequestId, address(raffle));
+
+        // Round 2: the same player enters with a different deposit and wins again.
+        uint256 secondRoundDeposit = 2 * entranceFee;
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: secondRoundDeposit}();
+
+        vm.warp(block.timestamp + interval);
+        uint256 secondRequestId = _performUpkeepAndGetRequestId();
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(secondRequestId, address(raffle));
+
+        // Checkpoint: both prizes are recorded as one accumulated claim.
+        uint256 expectedTotalWinnings = entranceFee + secondRoundDeposit;
+
+        assertEq(raffle.getClaimableWinnings(PLAYER), expectedTotalWinnings);
+        assertEq(raffle.getTotalOutstandingClaims(), expectedTotalWinnings);
+
+        // Act: withdraw the accumulated winnings once.
+        uint256 winnerBalanceBeforeWithdrawal = PLAYER.balance;
+
+        vm.prank(PLAYER);
+        raffle.withdrawWinnings();
+
+        uint256 winnerBalanceAfterWithdrawal = PLAYER.balance;
+
+        // Assert: the full accumulated amount is paid, and all accounting clears.
+        assertEq(winnerBalanceAfterWithdrawal - winnerBalanceBeforeWithdrawal, expectedTotalWinnings);
+        assertEq(raffle.getClaimableWinnings(PLAYER), 0);
+        assertEq(raffle.getTotalOutstandingClaims(), 0);
+        assertEq(address(raffle).balance, 0);
+    }
+
     function test_WithdrawWinningsPreservesClaim_WhenWinnerRejectsEth() public {
         // Arrange
         RejectingWinner rejectingWinner = new RejectingWinner();
