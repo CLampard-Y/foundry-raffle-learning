@@ -65,7 +65,7 @@ These are evidence labels, not safety grades. Documentation closure is separate.
 
 - [x] Add a regression where the **same winner wins twice before withdrawing**: claims accumulate; one withdrawal pays the sum and reduces liabilities by that sum.
 - [x] Add delayed settlement: retain an earlier claim, request the next round, withdraw the old claim while `CALCULATING`, then fulfill. Assert balance and old liabilities fall together and the new prize is unchanged. Entries and duplicate upkeep remain blocked while pending.
-- [ ] Extend the handler with bounded, deduplicated actors and independent accounting. Assert `sum(tracked individual claims) == totalOutstandingClaims` and `totalEntered == raffle.balance + totalSuccessfullyWithdrawn` in a closed model starting at zero and excluding forced ETH. Retain solvency.
+- [x] Extend the handler with bounded, deduplicated actors and independent accounting. Assert `sum(tracked individual claims) == totalOutstandingClaims` and `totalEntered == raffle.balance + totalSuccessfullyWithdrawn` in a closed model starting at zero and excluding forced ETH. Retain solvency.
 - [ ] Track expected per-actor claims and the current round pot independently from successful entries, the chosen winner and successful withdrawals; compare expected claims to contract getters. Sum/conservation checks alone can miss simultaneous under-reporting of both claims and the aggregate. Exercise repeated actors/winners and record successful operation counts so early returns do not create misleading activity evidence.
 - [ ] Add exact `WinningCredited` emitter/winner/amount assertions. Reuse the existing `WithdrawnWinnings` assertion.
 

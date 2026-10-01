@@ -20,8 +20,11 @@ contract RaffleHandler is Test {
     uint256 private immutable i_interval;
 
     address[] private s_actors;
+    uint256 private constant ACTOR_COUNT = 8;
 
     uint256 public enterCalls;
+    uint256 public totalEntered;
+    uint256 public totalSuccessfullyWithdrawn;
     uint256 public settleCalls;
     uint256 public withdrawCalls;
 
@@ -31,10 +34,15 @@ contract RaffleHandler is Test {
         i_subscriptionId = subscriptionId;
         i_entranceFee = entranceFee;
         i_interval = interval;
+
+        for (uint256 i = 0; i < ACTOR_COUNT; i++) {
+            address actor = makeAddr(string.concat("raffle actor", vm.toString(i)));
+            s_actors.push(actor);
+        }
     }
 
     /**
-     * @dev Creates deterministic actor from fuzz input (actorSeed)
+     * @dev Selects an actor from the fixed pool
      * and enters with valid entrance fee.
      * @param actorSeed - The fuzz input to generate actor.
      */
@@ -43,12 +51,13 @@ contract RaffleHandler is Test {
             return;
         }
 
-        address actor = address(uint160(uint256(keccak256(abi.encode("raffle actor", actorSeed)))));
-
+        uint256 actorCount = s_actors.length;
+        uint256 actorIndex = actorSeed % actorCount;
+        address actor = s_actors[actorIndex];
         hoax(actor, i_entranceFee);
         raffle.enterRaffle{value: i_entranceFee}();
 
-        s_actors.push(actor);
+        totalEntered += i_entranceFee;
         enterCalls++;
     }
 
@@ -99,8 +108,11 @@ contract RaffleHandler is Test {
             return;
         }
 
+        uint256 balanceBeforeWithdrawal = address(actor).balance;
         vm.prank(actor);
         raffle.withdrawWinnings();
+        uint256 balanceAfterWithdrawal = address(actor).balance;
+        totalSuccessfullyWithdrawn += balanceAfterWithdrawal - balanceBeforeWithdrawal;
 
         withdrawCalls++;
     }
@@ -128,10 +140,15 @@ contract RaffleHandler is Test {
 
         revert("request ID not found");
     }
+
+    function getActorsByIndex(uint256 index) external view returns (address) {
+        return s_actors[index];
+    }
 }
 
 contract RaffleInvariantTest is StdInvariant, Test {
     Raffle public raffle;
+
     HelperConfig public helperConfig;
     RaffleHandler public handler;
 
@@ -140,6 +157,7 @@ contract RaffleInvariantTest is StdInvariant, Test {
         HelperConfig.NetworkConfig memory config;
 
         (raffle, helperConfig, config) = deployer.run();
+        assertEq(address(raffle).balance, 0);
 
         handler = new RaffleHandler(
             raffle, config.vrfCoordinator, config.subscriptionId, config.entranceFee, config.interval
@@ -155,10 +173,108 @@ contract RaffleInvariantTest is StdInvariant, Test {
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
     }
 
+    function test_AllEightPlayersInPoolAreDistinct() public view {
+        uint256 actorCount = handler.actorsLength();
+        assertEq(actorCount, 8);
+
+        for (uint256 i = 0; i < actorCount; i++) {
+            address actor_i = handler.getActorsByIndex(i);
+            for (uint256 j = i + 1; j < actorCount; j++) {
+                address actor_j = handler.getActorsByIndex(j);
+                assertTrue(actor_i != actor_j);
+            }
+        }
+    }
+
+    function test_HandlerReusesActor_WithoutGrowingPool() public {
+        assertEq(handler.actorsLength(), 8);
+
+        address actor = handler.getActorsByIndex(0);
+        address expectedActor = makeAddr(string.concat("raffle actor", "0"));
+        assertEq(actor, expectedActor);
+
+        // Different seeds, but should select the same actor
+        uint256 E = raffle.getEntranceFee();
+        assertEq(handler.totalEntered(), 0);
+        handler.enter(0);
+        assertEq(handler.totalEntered(), E);
+        handler.enter(8);
+        assertEq(handler.totalEntered(), 2 * E);
+
+        // Assert
+        // Entering does not expand the pool.
+        assertEq(handler.actorsLength(), 8);
+        // Two and only two entries were made.
+        assertEq(handler.enterCalls(), 2);
+        assertEq(raffle.getPlayersLength(), 2);
+        //Both seeds select the same actor.
+        assertEq(raffle.getPlayerByIndex(0), actor);
+        assertEq(raffle.getPlayerByIndex(1), actor);
+    }
+
+    function test_HandlerTracksCumulativeWithdrawals_AcrossRounds() public {
+        uint256 E = raffle.getEntranceFee();
+        address actor = handler.getActorsByIndex(0);
+
+        // First withdrawal.
+        handler.enter(0);
+        handler.settle(0);
+        uint256 balanceBeforeFirstWithdrawal = address(actor).balance;
+        handler.withdraw(0);
+
+        assertEq(address(actor).balance, balanceBeforeFirstWithdrawal + E);
+        assertEq(handler.totalSuccessfullyWithdrawn(), E);
+        assertEq(handler.withdrawCalls(), 1);
+        assertEq(address(raffle).balance, 0);
+
+        // Second withdrawal: no-claim path.
+        uint256 balanceBeforeSecondWithdrawal = address(actor).balance;
+        handler.withdraw(0);
+
+        assertEq(address(actor).balance, balanceBeforeSecondWithdrawal);
+        assertEq(handler.totalSuccessfullyWithdrawn(), E);
+        assertEq(handler.withdrawCalls(), 1);
+        assertEq(address(raffle).balance, 0);
+
+        // Second enter.
+        handler.enter(0);
+        assertEq(handler.totalSuccessfullyWithdrawn(), E);
+
+        handler.settle(0);
+        uint256 balanceBeforeThirdWithdrawal = address(actor).balance;
+        handler.withdraw(0);
+        uint256 balanceAfterThirdWithdrawal = address(actor).balance;
+
+        assertEq(balanceAfterThirdWithdrawal - balanceBeforeThirdWithdrawal, E);
+        assertEq(handler.withdrawCalls(), 2);
+        assertEq(address(raffle).balance, 0);
+        assertEq(handler.totalEntered(), 2 * E);
+        assertEq(handler.totalSuccessfullyWithdrawn(), 2 * E);
+    }
+
     function invariant_TotalOutstandingClaimsNeverExceedBalance() public view {
         uint256 outstanding = raffle.getTotalOutstandingClaims();
         uint256 balance = address(raffle).balance;
 
         assertLe(outstanding, balance);
+    }
+
+    /**
+     * @dev Verify the reported aggregate claims aggress with the individual actor claims sum.
+     */
+    function invariant_SumOfActorClaimsEqualsTotalOutstandingClaims() public view {
+        uint256 sumOfClaims = 0;
+        uint256 actorsLength = handler.actorsLength();
+
+        for (uint256 i = 0; i < actorsLength; i++) {
+            address actor = handler.getActorsByIndex(i);
+            sumOfClaims += raffle.getClaimableWinnings(actor);
+        }
+
+        assertEq(sumOfClaims, raffle.getTotalOutstandingClaims());
+    }
+
+    function invariant_TotalEnteredEqualsWithdrawnPlusBalance() public view {
+        assertEq(handler.totalEntered(), handler.totalSuccessfullyWithdrawn() + address(raffle).balance);
     }
 }

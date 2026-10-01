@@ -461,10 +461,29 @@ Observed in the fresh checkout:
 - Formatting passed.
 - Local tests and coverage each ran 38 tests: 38 passed/0 failed/0 skipped.
 
-## 9.30
+## 9.30 ~ 10.1
 ### T2 - Independent accounting verification
 #### Step 1: Add a regression where the same winner wins twice before withdrawing
 - Two wins by `PLAYER` accumulate into one claim; one withdrawal pays the sum and clears the claim and outstanding liabilities.
 - Verification: focused regression passed; RPC-free suite: 40 passed / 0 failed / 0 skipped; test-file formatting and whitespace checks passed.
 #### Step 2: Add delayed settlement
 Old winner claims winnings while second round is pending (`CALCULATING`), the claim succeeds without changing the new prize and raffle state.
+#### Step 3：Extend the handler
+- The handler array `s_actors` mixed two different concepts.
+  - What we want (after changed): Array records account regisry (**DISTINT ACCOUNT**)
+  - Actual: Array is an entry list, records entry history (**MAY DUPLICATE**)
+
+  | Dimension                       | Previous handler                    | Current handler               |
+  | ------------------------------- | ----------------------------------- | ----------------------------- |
+  | Account addresses               | Derived from raw fuzz seeds         | Eight pre-created accounts    |
+  | Selected actor                  | Seed determines a generated address | Seed determines a pool index  |
+  | Operation sequence              | Fuzz-generated                      | Still fuzz-generated          |
+  | Successful entry count          | Depends on the sequence             | Still depends on the sequence |
+  | Settlement random word          | Fuzz-generated                      | Still fuzz-generated          |
+  | Distinct participating accounts | Potentially more than eight         | At most eight                 |
+- The test of "`sum(tracked individual claims) == totalOutstandingClaims`" and ``totalEntered == raffle.balance + totalSuccessfullyWithdrawn`` is not cleared
+  - Core code already satified this condition.
+  - Further test is needed to ensure this, preventing changes in the future.
+- Add test to verify the handler's bookkeeping is correct.
+  - `enter -> settle -> withdraw` workflow executes correctly.
+  - No-claim path does not change anything.
