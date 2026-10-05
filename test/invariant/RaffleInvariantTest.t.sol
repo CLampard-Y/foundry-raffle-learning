@@ -25,6 +25,7 @@ contract RaffleHandler is Test {
     uint256 public enterCalls;
     uint256 public totalEntered;
     uint256 public totalSuccessfullyWithdrawn;
+    uint256 public currentRoundPot;
     uint256 public settleCalls;
     uint256 public withdrawCalls;
 
@@ -57,6 +58,7 @@ contract RaffleHandler is Test {
         hoax(actor, i_entranceFee);
         raffle.enterRaffle{value: i_entranceFee}();
 
+        currentRoundPot += i_entranceFee;
         totalEntered += i_entranceFee;
         enterCalls++;
     }
@@ -92,6 +94,9 @@ contract RaffleHandler is Test {
 
         i_coordinator.fulfillRandomWordsWithOverride(requestId, address(raffle), randomWords);
 
+        assertTrue(raffle.getRaffleState() == Raffle.RaffleState.OPEN, "Raffle should not be in calculating state");
+        assertEq(raffle.getPlayersLength(), 0);
+        currentRoundPot = 0;
         settleCalls++;
     }
 
@@ -252,6 +257,54 @@ contract RaffleInvariantTest is StdInvariant, Test {
         assertEq(handler.totalSuccessfullyWithdrawn(), 2 * E);
     }
 
+    /**
+     * @dev Validate handler's independent pot bookkeeping.
+     */
+    function test_HandlerPreservesCurrentRoundPot_WhenOldClaimWithdrawn() public {
+        assertEq(handler.currentRoundPot(), 0);
+        uint256 E = raffle.getEntranceFee();
+
+        // Round 1: actor0 enters, settles but does not withdraw.
+        handler.enter(0);
+        assertEq(handler.currentRoundPot(), E);
+        handler.settle(0);
+        assertEq(raffle.getClaimableWinnings(address(handler.getActorsByIndex(0))), E);
+        assertEq(handler.currentRoundPot(), 0);
+        assertEq(address(raffle).balance, E);
+
+        // Round 2: actor1 enters twice and actor0 withdraws.
+        handler.enter(1);
+        handler.enter(1);
+
+        uint256 potBeforeFirstOldClaimWithdrawal = handler.currentRoundPot();
+        assertEq(potBeforeFirstOldClaimWithdrawal, 2 * E);
+        assertEq(address(raffle).balance, 3 * E);
+
+        handler.withdraw(0); // actor0 withdraws
+        assertEq(handler.withdrawCalls(), 1);
+        assertEq(handler.totalSuccessfullyWithdrawn(), E);
+        uint256 potAfterFirstOldClaimWithdrawal = handler.currentRoundPot();
+        assertEq(potBeforeFirstOldClaimWithdrawal, potAfterFirstOldClaimWithdrawal);
+
+        // actor0 withdraws again without influencing the current round pot.
+        handler.withdraw(0); // actor0 withdraws again
+        assertEq(handler.totalSuccessfullyWithdrawn(), E);
+        assertEq(handler.withdrawCalls(), 1);
+        uint256 potAfterSecondOldClaimWithdrawal = handler.currentRoundPot();
+        assertEq(potAfterSecondOldClaimWithdrawal, potAfterFirstOldClaimWithdrawal);
+
+        // actor1 can settles as expected.
+        handler.settle(1);
+        assertEq(handler.currentRoundPot(), 0);
+        assertTrue(raffle.getRecentWinner() == address(handler.getActorsByIndex(1)));
+    }
+
+    // ===============================================================
+    // Invariant tests require following assumptions:
+    //  1. Zero starting balance; tracked entries/withdrawals only.
+    //  2. Forced ETH excluded.
+    // ===============================================================
+
     function invariant_TotalOutstandingClaimsNeverExceedBalance() public view {
         uint256 outstanding = raffle.getTotalOutstandingClaims();
         uint256 balance = address(raffle).balance;
@@ -276,5 +329,13 @@ contract RaffleInvariantTest is StdInvariant, Test {
 
     function invariant_TotalEnteredEqualsWithdrawnPlusBalance() public view {
         assertEq(handler.totalEntered(), handler.totalSuccessfullyWithdrawn() + address(raffle).balance);
+    }
+
+    function invariant_BalanceEqualsOutstandingClaimsPlusCurrentRoundPot() public view {
+        uint256 balance = address(raffle).balance;
+        uint256 outstandingClaims = raffle.getTotalOutstandingClaims();
+        uint256 currentRoundPot = handler.currentRoundPot();
+
+        assertEq(balance, outstandingClaims + currentRoundPot);
     }
 }

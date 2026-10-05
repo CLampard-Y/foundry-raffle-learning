@@ -89,6 +89,7 @@ contract RaffleTest is Test {
     event EnteredRaffle(address indexed player);
     event PickedWinner(address indexed winner);
     event WithdrawnWinnings(address indexed winner, uint256 amount);
+    event WinningCredited(address indexed winner, uint256 amount);
 
     modifier raffleEnteredAndTimePassed() {
         vm.prank(PLAYER);
@@ -577,6 +578,8 @@ contract RaffleTest is Test {
 
         vm.expectEmit(true, false, false, false, address(raffle));
         emit PickedWinner(expectedWinner);
+        vm.expectEmit(true, false, false, true, address(raffle));
+        emit WinningCredited(expectedWinner, prize);
 
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWordsWithOverride(requestId, address(raffle), randomWords);
 
