@@ -18,8 +18,8 @@ This repository is intentionally a learning and testnet-oriented project. It is 
 | Core Raffle state machine             | `IMPLEMENTED / LOCALLY TESTED` | `OPEN -> CALCULATING -> OPEN`, entry, upkeep, VRF request, settlement, and pull-payment withdrawal are implemented.                                              |
 | Payout liveness remediation           | `IMPLEMENTED / LOCALLY TESTED` | VRF fulfillment credits winnings instead of pushing ETH to the winner; rejecting receivers cannot block round finalization.                                      |
 | HelperConfig safety tests             | `LOCALLY TESTED`               | Four tests cover unsupported configuration lookup, cached local mock addresses, exact stored Sepolia parameters, and rejection of a zero Sepolia deployer key.   |
-| Stateful invariant                    | `LOCALLY TESTED`               | `totalOutstandingClaims <= address(raffle).balance` across handler-generated operations; 128 runs, depth 64, 8,192 calls, zero reverts in the observed run.      |
-| Local test suite                      | `PASS`                         | 38 tests: 32 Raffle unit/fuzz tests, 4 HelperConfig tests, 1 local deployment integration test, and 1 invariant.                                                 |
+| Stateful accounting invariants        | `LOCALLY TESTED (SCOPED T2)`   | Four properties cover solvency, actual claim-sum reconciliation, conservation, and an independent round-pot model; each ran 128 runs / 8,192 calls with zero reverts. |
+| Local test suite                      | `PASS`                         | 2026-10-05: 47 tests, 0 failed, 0 skipped — 34 Raffle, 4 HelperConfig, 1 deployment, and 8 invariant-file tests (4 invariants + 4 handler tests).                 |
 | Formatting and build                  | `PASS WITH COMPILER WARNINGS`  | `forge fmt --check` and `forge build --sizes` pass; the `block.timestamp` lint is intentionally excluded because the raffle uses timestamp-based elapsed-time logic. |
 | Sepolia preflight and simulation      | `RECORDED; REFRESH BEFORE BROADCAST` | Read-only checks and a non-broadcast deployment simulation passed at their recorded dates; subscription state can change.                                  |
 | Pinned Sepolia fork tests             | `PASS (SNAPSHOT ONLY)`         | Three tests passed at block `11792671`; no fork deployment, live VRF fulfillment, or public transaction is established.                                          |
@@ -78,11 +78,16 @@ Winner ──withdrawWinnings()──▶ Clear claim, then transfer ETH
    The prize is credited to `s_claimableWinnings[winner]`, players are cleared, and the raffle returns to `OPEN` without making an external payment call.
 6. The winner withdraws separately through `withdrawWinnings()`. State is cleared before the external call, and a failed call reverts without losing the claim.
 
-The main accounting property tested by the invariant suite is:
+The invariant suite checks four accounting properties:
 
-`totalOutstandingClaims <= address(raffle).balance`
+```text
+totalOutstandingClaims <= raffle.balance
+sum(actual tracked actor claims) == totalOutstandingClaims
+totalEntered == raffle.balance + totalSuccessfullyWithdrawn
+raffle.balance == totalOutstandingClaims + currentRoundPot
+```
 
-This compares the aggregate liability counter with the contract balance. It does not independently sum every winner's claim or prove eventual VRF fulfillment. Previous winners can leave claims unwithdrawn while new rounds proceed. A winner that cannot receive ETH retains its claim, but there is currently no alternative withdrawal-recipient function.
+The handler independently tracks successful entries, withdrawals, and the current round pot using eight distinct actors. These checks assume a zero starting balance and no untracked or forced ETH. They verify aggregate accounting and reported claim consistency, not independently expected per-actor allocation across generated histories; that reference ledger is deferred. They do not prove eventual VRF fulfillment. Previous winners can leave claims unwithdrawn while new rounds proceed. A winner that cannot receive ETH retains its claim, but there is currently no alternative withdrawal-recipient function.
 
 ## Contracts and Scripts
 
@@ -94,7 +99,7 @@ This compares the aggregate liability counter with the contract balance. It does
 | [`script/Interactions.s.sol`](script/Interactions.s.sol)                               | Standalone subscription creation, funding, and consumer-registration scripts                                                         |
 | [`test/unit/RaffleTest.t.sol`](test/unit/RaffleTest.t.sol)                             | Contract unit, negative-path, fuzz, payout, accounting, and reentrancy tests                                                         |
 | [`test/unit/HelperConfigTest.t.sol`](test/unit/HelperConfigTest.t.sol)                 | Configuration lookup, local mock reuse, stored Sepolia parameters, and zero-key rejection tests                                      |
-| [`test/invariant/RaffleInvariantTest.t.sol`](test/invariant/RaffleInvariantTest.t.sol) | Handler-based stateful invariant for outstanding claim liabilities                                                                   |
+| [`test/invariant/RaffleInvariantTest.t.sol`](test/invariant/RaffleInvariantTest.t.sol) | Bounded handler tests and four stateful aggregate-accounting invariants                                                              |
 | [`test/integration/DeployRaffleTest.t.sol`](test/integration/DeployRaffleTest.t.sol)   | Local deployment ownership, subscription ownership, and consumer-registration integration test                                       |
 | [`test/mocks/LinkToken.sol`](test/mocks/LinkToken.sol)                                 | Local LINK-like token used by the mock setup                                                                                         |
 | [`notes/`](notes/)                                                                     | Learning and recovery notes; some notes are historical and may contain stale terminology                                             |
@@ -164,7 +169,7 @@ forge build --sizes
 forge test --no-match-path 'test/fork/**'
 ```
 
-The local suite runs in Forge's test EVM; no running Anvil node, RPC URL, funded wallet, or real private key is required. The recorded non-fork run passed **38 tests with 0 skipped**. The path filter keeps fork tests out of this RPC-independent lane; `forge test` includes the invariant suite automatically. An unfiltered `forge test` discovers the fork suite and fails in its setup when `SEPOLIA_RPC_URL` is absent. Run the fork suite separately with a configured RPC; its recorded result is **3 passed, 0 skipped** at the pinned Sepolia block:
+The local suite runs in Forge's test EVM; no running Anvil node, RPC URL, funded wallet, or real private key is required. The recorded non-fork run on 2026-10-05 passed **47 tests, 0 failed, 0 skipped**. The path filter keeps fork tests out of this RPC-independent lane; `forge test` includes the invariant suite automatically. An unfiltered `forge test` discovers the fork suite and fails in its setup when `SEPOLIA_RPC_URL` is absent. Run the fork suite separately with a configured RPC; its historical recorded result is **3 passed, 0 skipped** at the pinned Sepolia block:
 
 ```bash
 forge test --match-path test/fork/SepoliaForkTest.t.sol -vv
@@ -286,6 +291,10 @@ Notes / configuration version:
 
 ## Testing and Verification
 
+### T2 scoped accounting verification (2026-10-05)
+
+T2 is closed within the aggregate-accounting scope: repeated-winner and delayed-settlement regressions, four accounting invariants, handler bookkeeping tests, and exact `WinningCredited`/`WithdrawnWinnings` emitter/winner/amount assertions pass. Formatting, a cached build, and the RPC-free local suite passed; see the [dated T2 record](records/records.md) for revision and execution details. The per-actor stateful reference ledger remains deferred; no fresh coverage, fork, or live VRF evidence was added by this check.
+
 ### T1 local reproducibility check (2026-09-29)
 
 At implementation commit `70d1941`, a fresh local checkout with initialized submodules and empty Sepolia RPC/private-key values passed formatting, an uncached Solc `0.8.35` build, and the filtered local test and coverage runs (38 passed, 0 failed, 0 skipped). The build retained three OpenZeppelin `EnumerableSet.at` future-keyword warnings. The fork suite was checked separately with a configured RPC; these results do not establish a hosted CI run or live VRF fulfillment. See the [dated T1 record](records/records.md) for the command and evidence boundaries.
@@ -346,10 +355,10 @@ The Sepolia lookup selects the chain ID using the production constant getter. It
 - coordinator-only callback access and mock rejection of nonexistent or already-consumed request IDs;
 - winner selection, round reset, request isolation, and fuzzed player counts from 1 to 20;
 - pull-payment crediting, rejecting-winner liveness, claim preservation after failed withdrawal, duplicate-withdrawal rejection, and reentrancy resistance;
-- reserved winnings excluded from subsequent round prizes;
+- reserved winnings excluded from subsequent round prizes, accumulated claims when the same winner wins twice, and old-claim withdrawal while a later round is `CALCULATING`;
 - local deployer/subscription/Raffle ownership and VRF consumer registration;
 - the four HelperConfig behaviors and boundaries described above;
-- the bounded outstanding-claims invariant across handler-generated `enter`, `settle`, and `withdraw` sequences.
+- four aggregate-accounting invariants across bounded handler-generated `enter`, `settle`, and `withdraw` sequences, under the closed-model assumptions above.
 
 ### Remaining verification gaps
 
@@ -358,9 +367,8 @@ These are proposed follow-ups, not claims of completed work:
 1. **Public-network integration:** refresh subscription ownership/funding, verify consumer registration, LINK billing, callback gas, and a complete live VRF round. External automated scheduling is optional and requires separate evidence. Local mocks cannot establish node availability, fees, or latency.
 2. **Credential behavior:** decide the intended error behavior for absent/malformed values; test nonzero Sepolia-key resolution with a synthetic key and unsupported-chain `getDeployerKey` rejection. Keep each test's environment setup explicit.
 3. **Configuration assertions:** the pinned fork test now checks Sepolia chain ID and nonempty coordinator/LINK code. Entry-fee/interval and deployed mock-code checks remain conditional follow-ups.
-4. **Accounting depth:** independently reconcile tracked claim balances against the aggregate counter and test conservation across operations. The current handler immediately settles mock requests and re-funds the subscription before settlement; it does not model delayed callbacks or billing depletion.
-5. **Event observability:** add an exact `WinningCredited` event assertion. `WithdrawnWinnings` already has an emitter/winner/amount assertion in `test_WithdrawWinningsClearsClaim_WhenCallerHasClaim`.
-6. **Conditional script support:** if standalone interaction scripts become a supported workflow, test their persistence and failure paths on a persistent local chain. Do not duplicate wrapper tests solely for coverage.
+4. **Deferred accounting depth:** independently model per-actor entitlements across generated histories. The current aggregate model immediately settles mock requests and re-funds the subscription before settlement; delayed settlement is covered by a unit regression, not stateful callback-latency or live-billing evidence.
+5. **Conditional script support:** if standalone interaction scripts become a supported workflow, test their persistence and failure paths on a persistent local chain. Do not duplicate wrapper tests solely for coverage.
 
 Coverage percentage should remain a diagnostic signal, not the primary completion criterion.
 
@@ -414,7 +422,8 @@ This table summarizes status; the [pending checklist](records/PENDING_WORK_CHECK
 | Pull-payment and cross-round regression tests | Locally tested                             | Current Raffle suite and bounded invariant pass; security review remains separate                                                                   |
 | Initial HelperConfig test set                 | Locally tested                             | Four tests pass, within the behavior matrix's stated limits                                                                                         |
 | Reproducible toolchain                        | Locally verified (T1)                      | Foundry/Solc/settings pinned; fresh checkout at `70d1941` passed local checks. Hosted CI execution is not claimed                                   |
-| Additional verification                       | Proposed                                   | Risk-selected tests from the gaps above, with assertions and reproducible results                                                                   |
+| Scoped accounting verification               | Closed locally (T2)                        | Cross-round regressions, four aggregate invariants, handler tests, and exact credit-event assertions; per-actor stateful reference ledger deferred      |
+| Callback limits and privilege boundaries     | Pending (T3)                               | Gas-limited callback/post-state checks, request/callback failure characterization, and inherited coordinator-change permissions                          |
 | Sepolia preflight and simulation              | Recorded; refresh before broadcast         | Recheck current configuration, owner, funding, and final deployment simulation                                                                      |
 | Pinned Sepolia fork tests                     | Snapshot checks passed                    | Three tests passed at block `11792671`; fork deployment remains optional and unverified                                                              |
 | Live Sepolia VRF round                        | Not verified                               | Deployment and consumer registration, manual upkeep trigger, real fulfillment, and withdrawal receipts                                              |
@@ -422,7 +431,7 @@ This table summarizes status; the [pending checklist](records/PENDING_WORK_CHECK
 | Independent security review                   | Not performed in this documentation update | Reviewed commit, threat model, findings, remediation tests, and residual-risk record                                                                |
 | Operational procedure                         | Pending before public operation            | Owner/coordinator policy, funding and stalled-request monitoring, response contacts, and incident procedure reflecting the lack of onchain recovery |
 
-Recommended next milestone: complete the focused verification and reproducibility work in the [pending checklist](records/PENDING_WORK_CHECKLIST.md), then refresh pre-broadcast checks and simulation before a live Sepolia round. Keep testnet validation separate from authorization to operate with real funds.
+Recommended next milestone: complete T3 callback-limit and privilege-boundary checks in the [pending checklist](records/PENDING_WORK_CHECKLIST.md), then refresh deployment readiness under T4 before a live Sepolia round. Keep testnet validation separate from authorization to operate with real funds.
 
 ZK, RWA, upgradeability, governance, and mainnet operations are intentionally outside this repository’s current scope.
 

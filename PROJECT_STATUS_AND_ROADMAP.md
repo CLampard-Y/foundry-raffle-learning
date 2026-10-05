@@ -1,6 +1,6 @@
 # Project Status and Improvement Roadmap
 
-Updated: **2026-09-29 (Asia/Shanghai)**. Current implementation baseline: **`70d1941`**. The September 28 planning review below used `01a26a9`; T1's later local evidence is recorded separately.
+Updated: **2026-10-05 (Asia/Shanghai)**. T2's verified test changes are now committed as **`ab42ee0`** (2026-10-05 17:44:22 +08:00); verification was performed before that commit. The September 28 planning review used `01a26a9`; T1's reproducibility evidence remains tied to `70d1941`.
 
 ## 1. Purpose and ownership
 
@@ -12,13 +12,13 @@ The intended outcome is an explainable Solidity/Foundry testnet project with def
 
 ## 2. Current position and evidence
 
-**Assessment:** local implementation, T1 reproducibility checks, and snapshot integration are recorded. Focused accounting and callback/privilege verification remain before a live testnet round. Optional fork deployment is useful practice, but not automatically the highest-value remaining task.
+**Assessment:** local implementation, T1 reproducibility checks, scoped T2 accounting verification, and snapshot integration are recorded. T2 is closed within the aggregate-only model; the per-actor stateful reference ledger is explicitly deferred. T3 callback/privilege verification is next before a live testnet round. Optional fork deployment remains separate.
 
 | Area | Evidence and boundary | State |
 | --- | --- | --- |
 | Raffle and pull payment | `OPEN → CALCULATING → OPEN`; fulfillment credits claims; separate CEI withdrawal; rejecting receivers no longer block settlement through payout | Implemented / locally tested |
-| Accounting | Previous claims excluded from later prizes; individual withdrawal cases tested | Locally tested; repeated-winner and delayed-round depth pending |
-| Stateful invariant | `totalOutstandingClaims <= balance`; 128 × 64 actions | Locally tested; independent conservation/reconciliation still needed |
+| Accounting | Reserved prizes, repeated-winner accumulation, delayed-round withdrawal, and exact credit/withdrawal event assertions | Scoped T2 complete locally |
+| Stateful invariants | Solvency, actual claim-sum reconciliation, entry/withdrawal conservation, and balance = liabilities + independently modeled pot | Four invariants locally tested; zero-start/no-untracked-ETH model; per-actor reference ledger deferred |
 | Configuration/deployment | Four HelperConfig tests; integrated local deployment/ownership/consumer test | Locally tested; some signer cases remain |
 | Build and test lanes | Foundry `v1.7.1` selected in CI; Solc `0.8.35` and EVM settings pinned; local checks reproduced at `70d1941` without Sepolia credentials | T1 locally verified; hosted CI run not evidenced |
 | Sepolia preflight | September 26 snapshot at `11787627`; 18 LINK, expected owner, two historical consumers, unresolved pending requests | Recorded historical evidence; refresh before broadcast |
@@ -45,6 +45,8 @@ Commands used `/home/ZKdev/.foundry/bin/forge` on this server. No fork RPC check
 
 **T1 follow-up (2026-09-29, `70d1941`):** Foundry/Solc and EVM settings are pinned, CI excludes fork tests, and the fork suite fails at setup instead of skipping when its RPC is absent. A fresh local checkout with initialized submodules and empty Sepolia values passed formatting, an uncached build, filtered local tests and coverage (38 passed, 0 failed, 0 skipped); only three OpenZeppelin future-keyword warnings remain. A configured fork run separately recorded 3 passed, 0 skipped. See [records](records/records.md). This is local/fork evidence, not a hosted CI run or live VRF fulfillment.
 
+**T2 closure (2026-10-05):** the scoped regressions, four aggregate invariants, and exact `WinningCredited` assertion passed the RPC-free local suite; formatting and build-size checks passed. Commands/results and the deferred per-actor model are recorded in [records](records/records.md). No new fork, coverage, broadcast, or live VRF evidence is implied.
+
 ## 3. Review of the previous plan
 
 | Finding | Why it matters | Adjustment |
@@ -65,7 +67,7 @@ This is a risk-based planning review, not independent security certification. Ca
 | Milestone | Deliverable | Exit criterion | Status / task mapping |
 | --- | --- | --- | --- |
 | M0 — Core implementation | Raffle state machine, subscription scripts, pull-payment settlement | Core flow and payout regression tests | Complete locally |
-| M1 — Verification and reproducibility | Explicit build/CI baseline, stronger accounting tests, callback and privilege characterization | Required local tests pass; material findings addressed or explicitly bounded for this testnet scope | T1 locally verified; T2–T3 pending |
+| M1 — Verification and reproducibility | Explicit build/CI baseline, stronger accounting tests, callback and privilege characterization | Required local tests pass; material findings addressed or explicitly bounded for this testnet scope | T1 locally verified; scoped T2 closed; T3 pending |
 | M2 — External compatibility | Pinned fork evidence; fresh configuration/owner/funding check; reviewed deployment simulation | Snapshot and current assumptions recorded separately | B1 recorded; T4 refresh pending; B2 optional |
 | M3 — Live integration | One real Sepolia VRF round and withdrawal with manual upkeep trigger | Public receipts tie final source/config to successful callback and accounting | Pending: Gate 5A |
 | M4 — Explainable closure | Concise testing/security evidence, residual risks and operational procedure | User can explain major design/failure paths; documentation matches final revision | Start alongside M1, finish through T5 |
@@ -109,7 +111,7 @@ These labels are not a cumulative safety rating. Coverage and test counts measur
 | ID | Evidence / risk | Current handling and reassessment trigger |
 | --- | --- | --- |
 | R1 | Rejecting winner previously blocked push-payment settlement | Mitigated locally by pull payments and regression tests; preserve coverage |
-| R2 | Outstanding claims may be solvent without correct individual allocation | T2 adds expected per-actor claims, reconciliation and conservation; current inequality remains useful but incomplete |
+| R2 | Aggregate totals can be correct without correct individual allocation | T2 verifies aggregate reconciliation/conservation and retains individual unit/fuzz regressions; per-actor stateful reference ledger deferred on 2026-10-05, not claimed as verified |
 | R3 | Missing or failed fulfillment leaves `CALCULATING`; no recovery | T3 characterizes failure, T4 defines stop/inspect response; no new entry/duplicate upkeep while pending; recovery redesign separate |
 | R4 | Uncapped player array is cleared under fixed callback gas | T3 measures chosen-build behavior; if failure is found, reproduce and decide a minimal fix; demo-size intent is not enforcement |
 | R5 | Inherited `setCoordinator` callable by owner or current coordinator | T3 tests boundary; no migration during pending demo request; immutable subscription may not suit a new coordinator |
@@ -120,7 +122,7 @@ These labels are not a cumulative safety rating. Coverage and test counts measur
 | R10 | Fork tests previously skipped silently when RPC was absent | T1 excludes them from default CI and fails the explicit fork lane at setup without RPC; require 3 passed, 0 skipped for fork evidence |
 | R11 | Toolchain/build settings were not pinned consistently | T1 pins Foundry/Solc/settings and records fresh-checkout local results; hosted CI execution is not yet evidenced |
 | R12 | Legacy Automation sunset and no live scheduler evidence | Manual-triggered C1 is default; supported automation is conditional C2 |
-| R13 | Current invariant tops up subscription and settles immediately | Bound the model; T2 adds delayed-round regression; don't claim billing/latency coverage |
+| R13 | Handler tops up the mock subscription and settles immediately | Closed model documented; T2 includes a delayed-round unit regression; don't claim stateful latency or live billing coverage |
 | R14 | Notes and README lag execution evidence | T5 reconciles summaries; dated records remain evidence, not automatically current truth |
 
 Official addresses/API reference for T4: [VRF supported networks](https://docs.chain.link/vrf/v2-5/supported-networks). This documentation review does not refresh the actual subscription state or establish node availability.
@@ -131,7 +133,7 @@ Each milestone should leave one useful artifact and an explanation the user can 
 
 | Work | Observable learning evidence | Transfer to later Solidity / ZK / RWA work |
 | --- | --- | --- |
-| T2 accounting | Explain ghost totals; reproduce a lost-claim fault; reconcile individual claims and contract balance | Asset/liability conservation and independent reference models |
+| T2 accounting | Explain the ghost pot, aggregate conservation, exact credit events, and the deferred per-actor verification boundary | Asset/liability reconciliation and scoped model-based testing |
 | T3 callback/privileges | Trace rollback versus callback failure; test allowed/forbidden callers; explain gas bounds | Async oracle/verifier boundaries, access control and liveness reasoning |
 | M2/M3 integration | Explain snapshot versus live behavior; inspect receipts and partial deployment | Reproducible deployments and separating onchain evidence from external assumptions |
 | M4 closure | Explain trust model, residual risks and one incident response without reading AI prose | Reviewable design decisions and technical communication |
@@ -155,6 +157,7 @@ Finish this repository when required local hardening and the chosen integration 
 | `01a26a9` | Three pinned Sepolia fork tests and recorded results |
 | 2026-09-28 planning review | Current local tests rerun; checklist/roadmap separated; accounting, callback, reproducibility and automation scope revised |
 | `70d1941`, 2026-09-29 | T1 toolchain/test-lane changes; fresh-checkout local verification recorded separately from fork evidence |
+| `ab42ee0`, 2026-10-05 | Scoped T2 closed locally; aggregate pot model and credit-event assertion verified before commit; per-actor stateful ledger deferred |
 
 Relevant implementation: [Raffle](src/Raffle.sol), [deployment](script/DeployRaffle.s.sol), [configuration](script/HelperConfig.s.sol), [interactions](script/Interactions.s.sol).
 

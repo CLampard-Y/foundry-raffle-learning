@@ -461,7 +461,7 @@ Observed in the fresh checkout:
 - Formatting passed.
 - Local tests and coverage each ran 38 tests: 38 passed/0 failed/0 skipped.
 
-## 9.30 ~ 10.1
+## 9.30 ~ 10.5
 ### T2 - Independent accounting verification
 #### Step 1: Add a regression where the same winner wins twice before withdrawing
 - Two wins by `PLAYER` accumulate into one claim; one withdrawal pays the sum and clears the claim and outstanding liabilities.
@@ -487,3 +487,21 @@ Old winner claims winnings while second round is pending (`CALCULATING`), the cl
 - Add test to verify the handler's bookkeeping is correct.
   - `enter -> settle -> withdraw` workflow executes correctly.
   - No-claim path does not change anything.
+
+#### Step 4: Add pot tracking
+
+- Track `currentRoundPot` from successful entries; reset only after confirmed settlement. Old-claim and no-claim withdrawals leave it unchanged.
+- Assert `raffle.balance == totalOutstandingClaims + currentRoundPot`, retaining solvency, actual claim-sum reconciliation, and entry/withdrawal conservation.
+- Scope decision (2026-10-05): zero starting balance and no untracked/forced ETH. Per-actor stateful reference claims are deferred; existing unit/fuzz cases remain, but aggregate correctness does not prove individual allocation across generated histories.
+
+#### Step 5: Add explicit `WinningCredited` emitter/winner/amount assertions
+
+- Reuse the settlement fuzz test to check the Raffle emitter, indexed winner, and amount data for `WinningCredited`; retain the existing exact `WithdrawnWinnings` assertion.
+
+**T2 closure evidence (2026-10-05):**
+
+- Verified before commit in the working tree based on `9647d58`; the Step 4–5 test changes were subsequently committed as `ab42ee0` on **2026-10-05 17:44:22 +08:00**. The test files have no further differences from that commit; this revision update does not represent a new test run.
+- With empty Sepolia RPC/private-key values, `forge fmt --check` and `forge build --sizes` passed (build cache reused);
+- `forge test --no-match-path 'test/fork/**' --summary` passed **47 tests, 0 failed, 0 skipped**: 34 Raffle, 4 HelperConfig, 1 deployment, and 8 invariant-file tests. Each of the four invariants ran 128 runs / 8,192 calls with zero reverts;
+- handler regressions exercise successful entry, settlement, and withdrawal. Independent `protocol_test_engineer` source review found no scoped T2 blocker;
+- execution results above are the primary agent's checks. T2 is closed within the revised scope. No coverage/fork rerun or broadcast was performed.

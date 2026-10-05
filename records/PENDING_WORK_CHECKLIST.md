@@ -1,6 +1,6 @@
 # Pending Work Checklist
 
-Updated: **2026-09-29 (Asia/Shanghai)**. T1 implementation baseline: `70d1941`; later tasks remain as specified below.
+Updated: **2026-10-05 (Asia/Shanghai)**. T1 implementation baseline: `70d1941`; scoped T2 test baseline: `ab42ee0`; later tasks remain as specified below.
 
 This is the authoritative queue of **remaining work**. The [roadmap](../PROJECT_STATUS_AND_ROADMAP.md) owns scope, milestones and risk decisions; [records](records.md) owns dated commands, results and learning notes. Historical Gate numbers are retained for traceability, not as instructions to repeat completed work.
 
@@ -63,15 +63,19 @@ These are evidence labels, not safety grades. Documentation closure is separate.
 
 **Required before the planned live smoke test.** Use small test commits and preserve current cases.
 
+**Scope decision (2026-10-05):** use a small independent current-round-pot model for aggregate accounting. Defer the per-actor stateful reference ledger; retain existing unit/fuzz tests for individual entitlements and winner selection.
+
+**Status:** closed within this scope on 2026-10-05; test changes committed as `ab42ee0`. Dated pre-commit verification is in [records](records.md). Next required work: T3.
+
 - [x] Add a regression where the **same winner wins twice before withdrawing**: claims accumulate; one withdrawal pays the sum and reduces liabilities by that sum.
 - [x] Add delayed settlement: retain an earlier claim, request the next round, withdraw the old claim while `CALCULATING`, then fulfill. Assert balance and old liabilities fall together and the new prize is unchanged. Entries and duplicate upkeep remain blocked while pending.
-- [x] Extend the handler with bounded, deduplicated actors and independent accounting. Assert `sum(tracked individual claims) == totalOutstandingClaims` and `totalEntered == raffle.balance + totalSuccessfullyWithdrawn` in a closed model starting at zero and excluding forced ETH. Retain solvency.
-- [ ] Track expected per-actor claims and the current round pot independently from successful entries, the chosen winner and successful withdrawals; compare expected claims to contract getters. Sum/conservation checks alone can miss simultaneous under-reporting of both claims and the aggregate. Exercise repeated actors/winners and record successful operation counts so early returns do not create misleading activity evidence.
-- [ ] Add exact `WinningCredited` emitter/winner/amount assertions. Reuse the existing `WithdrawnWinnings` assertion.
+- [x] Extend the handler with bounded, deduplicated actors and independent accounting. Assert `sum(actual tracked individual claims) == totalOutstandingClaims` and `totalEntered == raffle.balance + totalSuccessfullyWithdrawn` in a closed model starting at zero and excluding forced ETH. Retain solvency.
+- [x] Complete the small pot model: accumulate `currentRoundPot` from successful entries, reset it only after confirmed settlement, and leave it unchanged on withdrawal. Assert `raffle.balance == totalOutstandingClaims + currentRoundPot` after generated handler actions under the existing zero-start/no-untracked-ETH assumptions. This checks aggregate completeness, not per-actor allocation; no additional claims mapping or ordered-entry model is required for this scope.
+- [x] Add exact `WinningCredited` emitter/winner/amount assertions. Reuse the existing `WithdrawnWinnings` assertion.
 
-**Done when:** focused regressions and stronger invariants pass with explicit model assumptions and successful enter/settle/withdraw activity. Explain a fault that the old inequality misses. Split request/fulfill handler actions later only if the delayed unit regression leaves a concrete gap.
+**Done when:** focused regressions and scoped aggregate invariants pass with explicit model assumptions and successful enter/settle/withdraw activity. Record the deferred per-actor model and explain the difference between aggregate completeness and individual entitlement. Split request/fulfill handler actions later only if the delayed unit regression leaves a concrete gap.
 
-> 中文：余额足够不等于账本正确。债权被少记时，旧 invariant 仍可能通过；独立金额记录和债权总和检查可以识别这类问题。
+> 中文：当前范围使用独立 pot 验证 aggregate accounting，逐 actor 的 stateful reference model 已延期。总金额正确不代表分配正确；个体债权仍由现有 unit/fuzz 场景验证，不声称已完成跨随机历史的逐 actor 核对。
 
 ## T3 — Callback limits and privilege boundaries
 
@@ -145,6 +149,7 @@ Start concise security notes during T2–T3; finish after the selected validatio
 
 ## Deferred unless justified by a concrete requirement
 
+- Per-actor stateful reference claims ledger: explicitly deferred by the T2 scope decision above. Revisit if broader allocation verification or a reproduced history-dependent defect justifies it; aggregate invariants do not replace this evidence.
 - Timeout/refund, alternate withdrawal recipient, request-ID/state redesign: separate decisions with fairness and late-callback analysis. [VRF security guidance](https://docs.chain.link/vrf/v2-5/security) warns against cancellation/re-request patterns and says failed callbacks are not retried. A naive retry is not safe recovery.
 - Standalone subscription/funding scripts: test persistence/failure paths only if selected for real use. A nonzero Sepolia subscription skips funding; successful deployment simulation does not test the LINK funding branch.
 - Forced ETH and broader adversarial receiver sequences: extend after required accounting work, explicitly revising the closed-model assumptions.
