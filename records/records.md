@@ -531,3 +531,34 @@ No tracked code changed; no RPC.
 - **Script finding:** creating a Sepolia subscription inside `DeployRaffle` would bake a simulation-time subscription ID (derived from `blockhash(block.number - 1)`) into later transactions; the live ID differs. Not triggered today because the Sepolia ID is hard-coded.
 - **Fork test** is pinned to block `11792671` and the historical subscription owner/balance/consumers; a dedicated subscription requires re-pinning with HelperConfig constants.
 - Follow-up tasks: checklist CW-A/B/C.
+
+### CW-A - Test-evidence fixes
+#### A1: Fix the false-green fulfillment test
+`test_fulfillmentConsumesRequest_WhenRequestIsValid` will success even with a fail callback produced (state is `CALCULATING` and the player array is not cleared).
+```
+test  ──►  mock.fulfillRandomWordsWithOverride(requestId, raffle, words)   // line 657
+              │  low-level call, gas-limited (line 134)
+              ▼
+          raffle.rawFulfillRandomWords(requestId, words)   // external, inherited from VRFConsumerBaseV2Plus
+              │  checks msg.sender == s_vrfCoordinator   (lines 143-146)
+              ▼
+          Raffle.fulfillRandomWords(requestId, words)       // internal override, your code (line 147)
+```
+- `fulfillRandomWordsWithOverride` in `VRFCoordinatorV2_5Mock` will always delete the request regardless of the callback result
+- Add assertions (state, players length) after the fulfillment, and ran mutation (add `revert()` in `raffle.fulfillRandomWords` to trigger the revert) to ensure the test works as expected, following assertion will revert if the callback fails:
+  - `assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN))`
+  - `assertEq(raffle.getPlayersLength(), 0)`
+#### A2: Make invariant activity observable
+Leakage: If a run never withdraws, "invariant holds" is vacuouslly true for the withdrawal path, because nothing was there to break it.
+- Change the rule of `handler.withdraw` to ensure at least one sucessful withdrawal in every run.
+- Add `afterInvariant`(automatically executes only when all runs finished) in `RaffleInvariantTest.t.sol`
+  - Add assertion to check at least one withdrawal was made.
+  - Observe the exact count of enter/settle/withdraw calls.
+
+Evidence lines:
+- RPC-free suite 47 passed;
+- `fmt --check` passed;
+- Guard passed on 128 runs for the default seed and seeds `42, 1234, 7`;
+- Single-run samples (depth 64): seed 42 → `20 enters / 10 settles / 9 withdrawals`; seed 1234 → `22 / 10 / 9`;
+
+**The stale-cache lesson**: Foundry replays saved failures from `cache/invariant/failures/` and a failing afterInvariant shrinks to a misleading one-call sequence, so clear that directory when verifying a fix.
