@@ -1,6 +1,6 @@
 # Project Status and Improvement Roadmap
 
-Updated: **2026-10-05 (Asia/Shanghai)**. T2's verified test changes are now committed as **`ab42ee0`** (2026-10-05 17:44:22 +08:00); verification was performed before that commit. The September 28 planning review used `01a26a9`; T1's reproducibility evidence remains tied to `70d1941`.
+Updated: **2026-10-05 (Asia/Shanghai)**. T2's verified test changes are now committed as **`ab42ee0`** (2026-10-05 17:44:22 +08:00); verification was performed before that commit. The September 28 planning review used `01a26a9`; T1's reproducibility evidence remains tied to `70d1941`. A pre-T3 planning review on 2026-10-05 at `eef8499` revised T3–T5 and the risk register (§3.1).
 
 ## 1. Purpose and ownership
 
@@ -12,15 +12,17 @@ The intended outcome is an explainable Solidity/Foundry testnet project with def
 
 ## 2. Current position and evidence
 
-**Assessment:** local implementation, T1 reproducibility checks, scoped T2 accounting verification, and snapshot integration are recorded. T2 is closed within the aggregate-only model; the per-actor stateful reference ledger is explicitly deferred. T3 callback/privilege verification is next before a live testnet round. Optional fork deployment remains separate.
+**Assessment:** local implementation, T1 reproducibility checks, scoped T2 accounting verification, and snapshot integration are recorded. T2 is closed within the aggregate-only model; the per-actor stateful reference ledger is explicitly deferred. T3 is next and now includes a binding capacity decision (D1): an exploratory probe found the settlement callback fails from 74 players under the configured 500000 gas. Optional fork deployment remains separate.
 
 | Area | Evidence and boundary | State |
 | --- | --- | --- |
 | Raffle and pull payment | `OPEN → CALCULATING → OPEN`; fulfillment credits claims; separate CEI withdrawal; rejecting receivers no longer block settlement through payout | Implemented / locally tested |
 | Accounting | Reserved prizes, repeated-winner accumulation, delayed-round withdrawal, and exact credit/withdrawal event assertions | Scoped T2 complete locally |
 | Stateful invariants | Solvency, actual claim-sum reconciliation, entry/withdrawal conservation, and balance = liabilities + independently modeled pot | Four invariants locally tested; zero-start/no-untracked-ETH model; per-actor reference ledger deferred |
+| Callback capacity | Exploratory probe (2026-10-05, not committed): success at ≤ 73 players, failure at ≥ 74 under a cold-storage model; failure leaves `CALCULATING` permanently | Planning evidence only; T3.1 test and D1 decision pending |
+| Owner/coordinator powers | Inherited `setCoordinator` (owner or coordinator) plus unchecked request ID lets the owner choose any round's winner | Identified by review; executable characterization pending (T3.2) |
 | Configuration/deployment | Four HelperConfig tests; integrated local deployment/ownership/consumer test | Locally tested; some signer cases remain |
-| Build and test lanes | Foundry `v1.7.1` selected in CI; Solc `0.8.35` and EVM settings pinned; local checks reproduced at `70d1941` without Sepolia credentials | T1 locally verified; hosted CI run not evidenced |
+| Build and test lanes | Foundry `v1.7.1` selected in CI; Solc `0.8.35` and EVM settings pinned; local checks reproduced at `70d1941` without Sepolia credentials; 47 passed at `eef8499` | T1 locally verified; hosted CI run not evidenced (local main ahead of origin; T1.1) |
 | Sepolia preflight | September 26 snapshot at `11787627`; 18 LINK, expected owner, two historical consumers, unresolved pending requests | Recorded historical evidence; refresh before broadcast |
 | Deployment simulation | September 27 at source `3d9c19e`: CREATE and `addConsumer` succeeded | Non-broadcast only |
 | Fork tests | September 28, block `11792671`, 3 passed | Snapshot config/subscription/constructor checks only |
@@ -31,7 +33,7 @@ The intended outcome is an explainable Solidity/Foundry testnet project with def
 
 ### Verification ledger
 
-Historical planning-review checks at `01a26a9`, 2026-09-28:
+Current RPC-free baseline: **47 passed, 0 failed, 0 skipped** (T2 closure; rerun at `eef8499` on 2026-10-05). The table below is the historical planning-review run at `01a26a9`, 2026-09-28:
 
 | Command | Result |
 | --- | --- |
@@ -60,24 +62,46 @@ Commands used `/home/ZKdev/.foundry/bin/forge` on this server. No fork RPC check
 | Roadmap duplicated the operational checklist | Divergent copies were already stale | Keep milestones here and detailed tasks in the pending checklist |
 | “Missing key” was treated as tested | Actual HelperConfig test sets key to zero; missing/malformed inputs are distinct | Correct the historical test checklist; don't claim nonexistent tests |
 
-This is a risk-based planning review, not independent security certification. Callback capacity is an open validation question, not a reproduced exploit in this review.
+This is a risk-based planning review, not independent security certification.
+
+### 3.1 2026-10-05 pre-T3 review
+
+Inputs: `protocol_test_engineer` (mock semantics, throwaway gas probe, baseline rerun), `protocol_security_auditor` (read-only risk coverage), `web3_docs_researcher` (external facts). Revision `eef8499`; no tracked code changed, no RPC/broadcast.
+
+| Finding | Evidence | Plan change |
+| --- | --- | --- |
+| Callback failure is certain at some N; only the threshold was unknown | Probe: success ≤ 73, failure ≥ 74 players at 500000 gas; ~5,600 gas per cold cleared slot. Failed callbacks are billed and never retried (official VRF docs; vendored coordinator) | R4 promoted from "fix only if reproduced" to **D1 decision before T4**; recommended player cap with margin |
+| Same-transaction Foundry tests overstate capacity by >5× | Warm slots: probe passed N = 400 in one transaction | Mandatory cold-slot methodology (`vm.cool` / `--isolate`) for T3 gas tests |
+| The original sample points (1, 20, 100) could not locate the boundary | 100 fails cold, passes warm | Boundary pair N/N+1 plus one demo-size margin case |
+| Owner can choose the winner, even while `OPEN` with no request | `setCoordinator` is owner-callable and not `virtual`; `fulfillRandomWords` ignores request ID and state | R5 impact stated; executable owner-override test; accepted trust assumption for this milestone |
+| Anyone can spend the subscription's LINK each interval at ~zero net cost | Permissionless `performUpkeep`, 30 s Sepolia interval, LINK billed per fulfillment | New R15; bounded/dedicated subscription and teardown in T4 |
+| "Dedicated account" conflicts with reusing a subscription it does not own | `DeployRaffle` calls `addConsumer` with the deployer key | New R16; explicit D2 signer/subscription decision in T4 |
+| Pending requests lock `removeConsumer`/`cancelSubscription` on the shared subscription | Vendored `VRFCoordinatorV2_5` `PendingRequestExists` | Strengthens the case for a dedicated demo subscription |
+| Hosted CI never ran the T2 commits | Local `main` ahead of `origin/main` | T1.1: one recorded hosted run (cheap R11 closure) |
+| Automation citation is a dead link; Etherscan `osaka` acceptance undocumented; Solc `0.8.35` has a legacy-pipeline bug | Research 2026-10-05 | Citation replaced; Sourcify fallback in Gate 5A; optional `0.8.37` in Deferred (no triggering construct in `src/`) |
+| Checklist baseline still claimed 38 tests / 1 invariant / missing credit-event assertion | README and records already show 47 / 4 / asserted | Baseline table corrected |
+| Completed-work review (2026-10-06): no recorded result false, no secret leaked; one false-green fulfillment test; invariant runs can perform zero withdrawals; in-script Sepolia subscription creation would yield a wrong ID; fork test and constants pinned to historical subscription state; false NatSpec rationale; floating pragma | Test-engineer seed probes (42, 1234); auditor trace of `SubscriptionAPI` ID derivation vs `forge script` simulation | Checklist **CW**: CW-A test fixes now; CW-B source edits bundled with D1; CW-C script/config/fork change set with D2 |
+
+Confirmed unchanged: T3 → T4 → 5A ordering, manual-trigger C1, the 500000 limit being within the 2,500,000 Sepolia maximum, HelperConfig Sepolia values, and the deferral of timeout/refund/request-ID redesign.
+
+> 中文：本轮评审的核心结论：(1) callback 失败不再是"可能"，约 74 人即失败，T4 前必须做容量决策；(2) Foundry 同一交易内测试会因 warm slot 严重高估容量；(3) owner 可指定赢家，需要测试证明并作为信任假设记录；(4) 无许可 `performUpkeep` 可消耗共享订阅 LINK，推荐专用订阅。
 
 ## 4. Milestones and completion boundaries
 
 | Milestone | Deliverable | Exit criterion | Status / task mapping |
 | --- | --- | --- | --- |
 | M0 — Core implementation | Raffle state machine, subscription scripts, pull-payment settlement | Core flow and payout regression tests | Complete locally |
-| M1 — Verification and reproducibility | Explicit build/CI baseline, stronger accounting tests, callback and privilege characterization | Required local tests pass; material findings addressed or explicitly bounded for this testnet scope | T1 locally verified; scoped T2 closed; T3 pending |
-| M2 — External compatibility | Pinned fork evidence; fresh configuration/owner/funding check; reviewed deployment simulation | Snapshot and current assumptions recorded separately | B1 recorded; T4 refresh pending; B2 optional |
+| M1 — Verification and reproducibility | Explicit build/CI baseline, stronger accounting tests, callback and privilege characterization, capacity decision | Required local tests pass; D1 recorded and any fix regression-tested and re-reviewed; material findings addressed or explicitly bounded | T1 locally verified (hosted run pending, T1.1); scoped T2 closed; T3 + D1 pending |
+| M2 — External compatibility | Pinned fork evidence; signer/subscription decision; fresh configuration/owner/funding check; reviewed deployment simulation of the post-D1 revision | Snapshot and current assumptions recorded separately | B1 recorded; T4 (+D2) pending; B2 optional |
 | M3 — Live integration | One real Sepolia VRF round and withdrawal with manual upkeep trigger | Public receipts tie final source/config to successful callback and accounting | Pending: Gate 5A |
 | M4 — Explainable closure | Concise testing/security evidence, residual risks and operational procedure | User can explain major design/failure paths; documentation matches final revision | Start alongside M1, finish through T5 |
 | M5 — Optional automation | A supported external service triggers a live round | Separate scheduler execution evidence and operational cost justified | Conditional: Gate 5B |
 
-M1 and M2 are not rigidly sequential: one bounded fork deployment can continue while focused tests are added. Finish M1 and fresh T4 checks before M3. A decision to end at local/fork evidence because external validation is blocked is valid educational closure when clearly labelled; it is not a live deployment claim.
+M1 and M2 are not rigidly sequential, but D1 must precede T4 and any fork deployment intended as rehearsal, because a cap changes the deployed bytecode. Finish M1 and fresh T4 checks before M3. A decision to end at local/fork evidence because external validation is blocked is valid educational closure when clearly labelled; it is not a live deployment claim.
 
 ### Why manual upkeep is the current default
 
-The official [Chainlink Automation page](https://docs.chain.link/chainlink-automation/introduction), checked September 28, 2026, lists v2.1 testnet sunset on June 24, 2026 and mainnet sunset on July 31, 2026. It directs users toward CRE. The recommendation here is to validate the existing contract through a manual call to permissionless `performUpkeep`, then observe real VRF fulfillment. No scheduler integration is needed for that contract path.
+Chainlink's [CRE migration notice](https://docs.chain.link/cre/reference/cla-migration-ts), rechecked 2026-10-05, states Automation v2.1 was deprecated on July 31, 2026 (testnet: June 24, 2026) and directs users to CRE; the earlier Automation introduction URL now returns 404, and the Sepolia Automation app no longer offers registration. The recommendation here is to validate the existing contract through a manual call to permissionless `performUpkeep`, then observe real VRF fulfillment. No scheduler integration is needed for that contract path.
 
 CRE adoption would introduce a separate external workflow and maintenance commitment. Evaluate it only after M3 if automation remains a meaningful goal. “Automation-compatible functions” and “live automated operation” must remain separate claims.
 
@@ -112,18 +136,20 @@ These labels are not a cumulative safety rating. Coverage and test counts measur
 | --- | --- | --- |
 | R1 | Rejecting winner previously blocked push-payment settlement | Mitigated locally by pull payments and regression tests; preserve coverage |
 | R2 | Aggregate totals can be correct without correct individual allocation | T2 verifies aggregate reconciliation/conservation and retains individual unit/fuzz regressions; per-actor stateful reference ledger deferred on 2026-10-05, not claimed as verified |
-| R3 | Missing or failed fulfillment leaves `CALCULATING`; no recovery | T3 characterizes failure, T4 defines stop/inspect response; no new entry/duplicate upkeep while pending; recovery redesign separate |
-| R4 | Uncapped player array is cleared under fixed callback gas | T3 measures chosen-build behavior; if failure is found, reproduce and decide a minimal fix; demo-size intent is not enforcement |
-| R5 | Inherited `setCoordinator` callable by owner or current coordinator | T3 tests boundary; no migration during pending demo request; immutable subscription may not suit a new coordinator |
-| R6 | Callback ignores request ID/state validation and assumes a nonempty word array | Trusted coordinator + one request at a time is the current model; revisit before adding concurrent requests, migration or recovery |
+| R3 | Missing or failed fulfillment leaves `CALCULATING` permanently; the round pot is locked; failed callbacks are billed and never retried | T3.1 asserts the exact failed state; T4 defines stop/inspect response; the owner override (R5) is the only exit and is not a fair recovery; recovery redesign separate |
+| R4 | Uncapped player array is cleared under fixed callback gas; probe: failure at ≥ 74 players (cold model, 500000, pinned build); griefable for ~0.74 Sepolia ETH | **D1 before T4:** recommended enforced cap with margin (Builder → regression → re-review), or recorded acceptance; same-transaction tests are invalid evidence |
+| R5 | Inherited `setCoordinator` callable by owner or current coordinator; with R6 this lets the owner choose any round's winner and take the pot, even while `OPEN` with no request | T3.2 tests the boundary and the override sequence; accepted owner-trust assumption for this testnet milestone (not `virtual`; removal is a redesign); state it in T5; never use it to complete the live demo |
+| R6 | Callback ignores request ID/state validation and assumes a nonempty word array | Trusted coordinator + one request at a time is the current model; exercised by the T3.2 override test; validation alone would not stop R5 (the request ID is public); revisit before concurrent requests, migration or recovery |
 | R7 | Permanently rejecting winner cannot withdraw its own claim | Accepted limitation for this testnet milestone; claim remains reserved and later rounds proceed; alternate recipient conditional |
-| R8 | Shared static subscription includes historical pending requests | Previous reuse decision preserved; T4 refreshes funding/owner/consumer state and budget; isolate if activity cannot be bounded |
-| R9 | Deployment and consumer registration are separate transactions | T4/T5A handle partial success; do not enter until membership is confirmed |
+| R8 | Shared static subscription includes historical pending requests, which also block `removeConsumer`/`cancelSubscription` | T4 D2 recommends a dedicated bounded subscription; reuse remains allowed only with deployer = subscription owner and recorded budget |
+| R9 | Deployment and consumer registration are separate transactions | Simulation catches a wrong-signer `addConsumer` before broadcast; CW-C adds post-deploy assertions and an explicit-address recovery path; do not enter until membership is confirmed |
 | R10 | Fork tests previously skipped silently when RPC was absent | T1 excludes them from default CI and fails the explicit fork lane at setup without RPC; require 3 passed, 0 skipped for fork evidence |
-| R11 | Toolchain/build settings were not pinned consistently | T1 pins Foundry/Solc/settings and records fresh-checkout local results; hosted CI execution is not yet evidenced |
+| R11 | Toolchain/build settings were not pinned consistently | T1 pins Foundry/Solc/settings and records fresh-checkout local results; T1.1 records one hosted run; Solc `0.8.37` optional (legacy-pipeline bug in `0.8.35` not triggered in `src/`) |
 | R12 | Legacy Automation sunset and no live scheduler evidence | Manual-triggered C1 is default; supported automation is conditional C2 |
 | R13 | Handler tops up the mock subscription and settles immediately | Closed model documented; T2 includes a delayed-round unit regression; don't claim stateful latency or live billing coverage |
 | R14 | Notes and README lag execution evidence | T5 reconciles summaries; dated records remain evidence, not automatically current truth |
+| R15 | Permissionless `performUpkeep` lets anyone spend one request's LINK per interval (30 s on Sepolia) at ~zero net cost; exhaustion stalls every consumer on that subscription | T4 bounds budget via dedicated/limited subscription, reviews the interval and defines teardown; no code change required for the testnet demo |
+| R16 | Consumer registration requires the subscription owner; the deployer key also becomes Raffle owner | T4 D2 records deployer/owner/subscription alignment; testnet-only key, keystore preferred |
 
 Official addresses/API reference for T4: [VRF supported networks](https://docs.chain.link/vrf/v2-5/supported-networks). This documentation review does not refresh the actual subscription state or establish node availability.
 
@@ -134,7 +160,7 @@ Each milestone should leave one useful artifact and an explanation the user can 
 | Work | Observable learning evidence | Transfer to later Solidity / ZK / RWA work |
 | --- | --- | --- |
 | T2 accounting | Explain the ghost pot, aggregate conservation, exact credit events, and the deferred per-actor verification boundary | Asset/liability reconciliation and scoped model-based testing |
-| T3 callback/privileges | Trace rollback versus callback failure; test allowed/forbidden callers; explain gas bounds | Async oracle/verifier boundaries, access control and liveness reasoning |
+| T3 callback/privileges | Trace rollback versus callback failure; explain why warm-slot tests mislead; justify D1; show how an authorized caller can still break fairness | Async oracle/verifier boundaries, access control and liveness reasoning |
 | M2/M3 integration | Explain snapshot versus live behavior; inspect receipts and partial deployment | Reproducible deployments and separating onchain evidence from external assumptions |
 | M4 closure | Explain trust model, residual risks and one incident response without reading AI prose | Reviewable design decisions and technical communication |
 
@@ -158,6 +184,7 @@ Finish this repository when required local hardening and the chosen integration 
 | 2026-09-28 planning review | Current local tests rerun; checklist/roadmap separated; accounting, callback, reproducibility and automation scope revised |
 | `70d1941`, 2026-09-29 | T1 toolchain/test-lane changes; fresh-checkout local verification recorded separately from fork evidence |
 | `ab42ee0`, 2026-10-05 | Scoped T2 closed locally; aggregate pot model and credit-event assertion verified before commit; per-actor stateful ledger deferred |
+| `eef8499` + planning review, 2026-10-05 | Pre-T3 review: capacity probe (73/74), owner-override, LINK-drain and signer findings; T3/T4 restructured around D1/D2 |
 
 Relevant implementation: [Raffle](src/Raffle.sol), [deployment](script/DeployRaffle.s.sol), [configuration](script/HelperConfig.s.sol), [interactions](script/Interactions.s.sol).
 

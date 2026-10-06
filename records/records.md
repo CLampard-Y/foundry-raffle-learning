@@ -505,3 +505,29 @@ Old winner claims winnings while second round is pending (`CALCULATING`), the cl
 - `forge test --no-match-path 'test/fork/**' --summary` passed **47 tests, 0 failed, 0 skipped**: 34 Raffle, 4 HelperConfig, 1 deployment, and 8 invariant-file tests. Each of the four invariants ran 128 runs / 8,192 calls with zero reverts;
 - handler regressions exercise successful entry, settlement, and withdrawal. Independent `protocol_test_engineer` source review found no scoped T2 blocker;
 - execution results above are the primary agent's checks. T2 is closed within the revised scope. No coverage/fork rerun or broadcast was performed.
+
+## 10.5
+### Pre-T3 planning review (roadmap §3.1)
+
+Revision `eef8499`, working tree clean before and after. Specialists: `protocol_test_engineer`, `protocol_security_auditor` (read-only), `web3_docs_researcher` (read-only). No tracked code changed; no RPC, fork or broadcast.
+
+- **Baseline rerun:** `forge test --no-match-path 'test/fork/**'` → 47 passed, 0 failed, 0 skipped (34 Raffle, 4 HelperConfig, 1 deploy, 8 invariant-file).
+- **Exploratory callback-capacity probe** (throwaway `test/tmp_probe/CallbackGasProbe.t.sol`, deleted afterwards; not committed and **not T3 evidence**):
+  - Setup: `DeployRaffle.run()`, N distinct players, warp, `performUpkeep`, mock `fulfillRandomWords`; pinned build (solc `0.8.35`, optimizer off, `osaka`), callback limit `500000`.
+  - Cold model (`vm.cool` or `forge test --isolate`): success for N ≤ 73, failure from N = 74 (also 76, 80, 100, 150, 200). On failure: `RandomWordsFulfilled.success == false`, state `CALCULATING`, players = N, liabilities unchanged.
+  - Unbounded callback cost: ~96,519 gas at N = 1, ~+5,600 per extra player (~651,023 at N = 100).
+  - Warm same-transaction model: ~800 gas per player; success up to at least N = 400. **Invalid capacity evidence.**
+- **Mock notes:** `VRFCoordinatorV2_5Mock` forwards `callbackGasLimit` with a plain `call` (no exact-gas check), deletes the request and emits `success=false` on callback failure, and charges ~62.6 LINK per fulfillment with HelperConfig mock prices (a second unfunded fulfillment reverts `InsufficientBalance`). The live coordinator uses `_callWithExactGas` and bills failed callbacks.
+- **Review findings:** owner can choose the winner via `setCoordinator` + `rawFulfillRandomWords` (also while `OPEN`); permissionless upkeep can drain subscription LINK; deployer must own the subscription for `addConsumer`. Mapped to R4, R5, R15, R16.
+- **External facts:** Sepolia VRF parameters match HelperConfig (max callback 2,500,000); Automation v2.1 deprecation dates confirmed via the CRE migration page (old URL 404); Solc `0.8.35` (2026-04-29) and Foundry `v1.7.1` (2026-05-08) exist; Fusaka active on Sepolia since 2025-10-14; Etherscan `osaka` acceptance undocumented.
+
+## 10.6
+### Completed-work review (checklist section CW)
+Revision `eef8499` plus uncommitted planning-doc edits.
+No tracked code changed; no RPC.
+
+- **Invariant reachability probe** (throwaway `test/tmp_probe/InvariantReachProbe.t.sol`, `afterInvariant` requiring enter/settle/withdraw > 0): default seed passed; `forge test --fuzz-seed 42` failed "no withdraw"; `--fuzz-seed 1234` failed "no withdraw"/"no settle" (reported after shrinking). The four production invariants never failed. `FOUNDRY_INVARIANT_SHOW_METRICS=true` counts (~2.7k per selector, 0 reverts) include early returns and are not effective-action evidence.
+- **False-green test:** `test_fulfillmentConsumesRequest_WhenRequestIsValid` would pass with a failed callback (mock deletes the request regardless).
+- **Script finding:** creating a Sepolia subscription inside `DeployRaffle` would bake a simulation-time subscription ID (derived from `blockhash(block.number - 1)`) into later transactions; the live ID differs. Not triggered today because the Sepolia ID is hard-coded.
+- **Fork test** is pinned to block `11792671` and the historical subscription owner/balance/consumers; a dedicated subscription requires re-pinning with HelperConfig constants.
+- Follow-up tasks: checklist CW-A/B/C.
