@@ -562,3 +562,10 @@ Evidence lines:
 - Single-run samples (depth 64): seed 42 → `20 enters / 10 settles / 9 withdrawals`; seed 1234 → `22 / 10 / 9`;
 
 **The stale-cache lesson**: Foundry replays saved failures from `cache/invariant/failures/` and a failing afterInvariant shrinks to a misleading one-call sequence, so clear that directory when verifying a fix.
+
+### T1.1 - Hosted CI evidence
+Baseline commit `ba12f31538e4cc24455f0c9ff3ec3aae0f8bac2d`; push-triggered run #35, ID `37448187929` (created 2026-10-06 10:12 UTC): https://github.com/CLampard-Y/foundry-raffle-learning/actions/runs/37448187929
+- CI workflow passed (conclusion `success`, head SHA `ba12f31`); this revision contains the CW-A commit `5d9c667` and the T2 commits.
+- `forge --version` reports Foundry `v1.7.1`.
+- Ran 4 test suites in 2.41s (2.99s CPU time): `47 tests passed, 0 failed, 0 skipped` (47 total tests)
+- **Boundary:** RPC-free lane only (fork tests excluded); it shows the pinned Foundry version ran and the local suite reproduces on a clean hosted runner. It is not fork (B1) evidence, a security review, or callback-gas evidence. Runs #31-#34 on earlier pushes also concluded `success`.

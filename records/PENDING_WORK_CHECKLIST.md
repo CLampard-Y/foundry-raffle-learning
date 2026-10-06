@@ -1,6 +1,6 @@
 # Pending Work Checklist
 
-Updated: **2026-10-05 (Asia/Shanghai)**. T1 implementation baseline: `70d1941`; scoped T2 test baseline: `ab42ee0`; T3–T5 revised by the 2026-10-05 planning review (see [roadmap §3.1](../PROJECT_STATUS_AND_ROADMAP.md#31-2026-10-05-pre-t3-review)).
+Updated: **2026-10-06 (Asia/Shanghai)**. T1 implementation baseline: `70d1941`; hosted CI run recorded at `ba12f31` (T1.1); scoped T2 test baseline: `ab42ee0`; T3–T5 revised by the 2026-10-05 planning review (see [roadmap §3.1](../PROJECT_STATUS_AND_ROADMAP.md#31-2026-10-05-pre-t3-review)).
 
 This is the authoritative queue of **remaining work**. The [roadmap](../PROJECT_STATUS_AND_ROADMAP.md) owns scope, milestones and risk decisions; [records](records.md) owns dated commands, results and learning notes. Historical Gate numbers are retained for traceability, not as instructions to repeat completed work.
 
@@ -10,7 +10,7 @@ This is the authoritative queue of **remaining work**. The [roadmap](../PROJECT_
 
 | Evidence                  | Established result                                                                                                                                                     | Boundary                                                                                      |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Local suite               | 47 passed, 0 failed, 0 skipped (T2 closure 2026-10-05; rerun at `eef8499` during the planning review): 34 Raffle, 4 HelperConfig, 1 deployment, 8 invariant-file tests | RPC/fork tests excluded; hosted CI has not run the T2 commits                                 |
+| Local suite               | 47 passed, 0 failed, 0 skipped (T2 closure 2026-10-05; rerun at `eef8499` during the planning review): 34 Raffle, 4 HelperConfig, 1 deployment, 8 invariant-file tests | RPC/fork tests excluded; hosted run `37448187929` at `ba12f31` passed 47 (T1.1)              |
 | Invariants                | Four aggregate properties (solvency, claim-sum reconciliation, conservation, balance = liabilities + modeled pot); 128 runs, depth 64, zero reverts                    | Zero-start/no-forced-ETH closed model; handler settles immediately; per-actor ledger deferred |
 | Gate 2 preflight          | Recorded 2026-09-26, block `11787627`: code presence, owner, 18 LINK, two historical consumers, pending requests                                                       | Historical snapshot, not current funding assurance                                            |
 | Gate 3 simulation         | Recorded 2026-09-27: deployment + `addConsumer` succeeded without broadcast                                                                                            | Simulated address is not a public deployment                                                  |
@@ -28,7 +28,7 @@ Recommended order (each phase ends at a reviewable commit boundary):
 | --- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------- |
 | 0   | Plan baseline                                       | Review and commit the 2026-10-05/06 planning-doc edits                                                                                                                                                     | —                     | Docs-only commit                                        |
 | 1   | **CW-A**                                            | False-green fulfillment assertions; invariant withdraw steering + `afterInvariant` reachability                                                                                                            | 0                     | RPC-free suite passes; effective action counts recorded |
-| 2   | **T1.1**                                            | Push (user action) and record one hosted CI run                                                                                                                                                            | 1 (so CI covers CW-A) | Run ID, revision, result                                |
+| 2   | **T1.1**                                            | ~~Push and record one hosted CI run~~ (done)                                                                                                                                                              | 1 (so CI covers CW-A) | Run ID, revision, result                                |
 | 3   | **T3.1**                                            | Cold-model capacity boundary pair, demo-size margin, failed-callback state                                                                                                                                 | 1                     | Measured N/N+1 recorded                                 |
 | 3′  | **T3.2** (parallel with 3)                          | Request rollback, `setCoordinator` boundary, owner override                                                                                                                                                | 1                     | Tests pass; trust assumption recorded                   |
 | 4   | **D1**                                              | Decide cap (recommended) or accept; record in R4                                                                                                                                                           | 3                     | Decision + rationale in roadmap                         |
@@ -101,9 +101,11 @@ Do these as **one change set** with D2, because the subscription ID, HelperConfi
 
 ### T1.1 — Hosted CI evidence (small follow-up)
 
-- [ ] Push the local commits (main is ahead of `origin/main`; requires the user's own push) and record the GitHub Actions run ID, revision and result for the RPC-free lane. Pinning is only half the claim until CI has actually run the pinned toolchain; this closes R11 cheaply.
+- [x] Push the local commits and record the GitHub Actions run ID, revision and result for the RPC-free lane. Pinning is only half the claim until CI has actually run the pinned toolchain; this closes R11 cheaply.
 
 **Done when:** one hosted run on a recorded revision passes, or its failure is diagnosed and recorded.
+
+**Closed 2026-10-06:** run [`37448187929`](https://github.com/CLampard-Y/foundry-raffle-learning/actions/runs/37448187929) at `ba12f31` concluded `success` (Foundry `v1.7.1`, 47 passed, fork lane excluded). Details in [records](records.md). Later commits need no repeat run unless the CI claim is reused.
 
 ## T2 — Independent accounting verification
 

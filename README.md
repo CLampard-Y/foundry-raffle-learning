@@ -142,7 +142,7 @@ The handler independently tracks successful entries, withdrawals, and the curren
 | OpenZeppelin Contracts | `v4.9.6` submodule, pinned by `foundry.lock`                                                     |
 | Solmate                | Pinned git revision in `foundry.lock`                                                            |
 
-The pinned settings and fresh-checkout results improve reproducibility; they do not establish a hosted CI run or identical behavior across every environment.
+The pinned settings and fresh-checkout results improve reproducibility; a hosted CI run (RPC-free lane) passed at `ba12f31`, but this does not establish identical behavior across every environment or fork/live evidence.
 
 ## Quick Start
 
