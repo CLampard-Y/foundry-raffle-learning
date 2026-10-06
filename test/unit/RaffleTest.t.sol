@@ -654,9 +654,19 @@ contract RaffleTest is Test {
         randomWords[0] = 0;
 
         // Act
+        uint256 expectedSettlementTimestamp = block.timestamp;
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWordsWithOverride(requestId, address(raffle), randomWords);
 
         // Assert
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
+        assertEq(raffle.getPlayersLength(), 0);
+
+        // defensive check
+        address expectedWinner = PLAYER;
+        assertEq(raffle.getRecentWinner(), expectedWinner);
+        assertEq(raffle.getClaimableWinnings(expectedWinner), entranceFee);
+        assertEq(raffle.getLastTimeStamp(), expectedSettlementTimestamp);
+
         // A successfully fulfilled VRF request cannot be fulfilled twice.
         vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(requestId, address(raffle));

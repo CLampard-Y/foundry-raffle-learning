@@ -5,6 +5,7 @@ pragma solidity ^0.8.19;
 import {Test} from "forge-std/Test.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {console} from "forge-std/console.sol";
 
 import {Raffle} from "../../src/Raffle.sol";
 import {DeployRaffle} from "../../script/DeployRaffle.s.sol";
@@ -107,7 +108,15 @@ contract RaffleHandler is Test {
             return;
         }
 
+        // Ensure there is at least one actor to attempt withdrawal.
         address actor = s_actors[actorSeed % actorCount];
+        for (uint256 i = 1; i < ACTOR_COUNT; i++) {
+            if (raffle.getClaimableWinnings(actor) > 0) {
+                break;
+            }
+
+            actor = s_actors[((actorSeed % actorCount) + i) % actorCount];
+        }
 
         if (raffle.getClaimableWinnings(actor) == 0) {
             return;
@@ -304,6 +313,15 @@ contract RaffleInvariantTest is StdInvariant, Test {
     //  1. Zero starting balance; tracked entries/withdrawals only.
     //  2. Forced ETH excluded.
     // ===============================================================
+
+    function afterInvariant() public view {
+        assertGt(handler.withdrawCalls(), 0, "No withdraw calls have been made");
+
+        console.log("=== After Invariant Test ===");
+        console.log("Enter Calls", handler.enterCalls());
+        console.log("Settle Calls", handler.settleCalls());
+        console.log("Withdraw Calls", handler.withdrawCalls());
+    }
 
     function invariant_TotalOutstandingClaimsNeverExceedBalance() public view {
         uint256 outstanding = raffle.getTotalOutstandingClaims();
