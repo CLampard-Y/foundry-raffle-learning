@@ -569,3 +569,31 @@ Baseline commit `ba12f31538e4cc24455f0c9ff3ec3aae0f8bac2d`; push-triggered run #
 - `forge --version` reports Foundry `v1.7.1`.
 - Ran 4 test suites in 2.41s (2.99s CPU time): `47 tests passed, 0 failed, 0 skipped` (47 total tests)
 - **Boundary:** RPC-free lane only (fork tests excluded); it shows the pinned Foundry version ran and the local suite reproduces on a clean hosted runner. It is not fork (B1) evidence, a security review, or callback-gas evidence. Runs #31-#34 on earlier pushes also concluded `success`.
+
+## 10.7
+### T3 - Gas-test methodology
+Problems:
+- When Clear a cold slot (`s_players = new address payable[](0)` in `Raffle.sol:166`), total gas grows linearly with N (N > 73 will exceed the gas limit, casuing a failure).
+- A Foundry test function is one transaction, if a test calls  `enterRaffle` 400 times and then fulfills (including clearing), all 400 slots were written earlier in the same transaction, they are warm; However in real network, calls and fulfillment are separate transactions, the slots are cold. Which will cause overstate of gas capacity. 
+
+### T3.1 - Callback capacity and failed-callback state
+Pinned build
+- Foundry `1.7.1`;
+- solc `0.8.35`;
+- optimizer `false`;
+- `callbackGasLimit` is `500000`;
+
+Created two helper functions:
+- `_EntersSpecificAmountDistinctPlayers(uint256 amount)`: enters `amount` distinct players, returns the request ID.
+- `_FulfillRequest(uint256 requestId)`: fulfills the request, returns the `success` variable (records the outcome of the fulfillment).
+
+Gas limit is `500000` and model **estimation**:
+- `gas ≈ 96,500 + 5,600 * (N - 1)`;
+- N = 20，actual gas ≈ 202,900 (actual 201,567 , 相差 0.66%) => Pass;
+- N = 73, gas ≈  499,700 (actual 498,420) => Pass;
+- N = 74, gas ≈  505,300 => Fail (`success = false`);
+- The [Test runs in 2026.10.8](../test/unit/RaffleCapacityTest.t.sol) agree with above cases (plain runs and `--isolate` runs). 
+
+Notes
+- `vm.cool` must placed after `performUpkeep` and no reads between `vm.cool` and `fulfillment`.
+- The mutation result is run on a temporary copy, not an independent sign-off.
