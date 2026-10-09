@@ -1,6 +1,6 @@
 # Project Status and Improvement Roadmap
 
-Updated: **2026-10-06 (Asia/Shanghai)**. T2's verified test changes are committed as **`ab42ee0`** (2026-10-05 17:44:22 +08:00); verification was performed before that commit. The September 28 planning review used `01a26a9`; T1's reproducibility evidence remains tied to `70d1941`. A pre-T3 planning review on 2026-10-05 at `eef8499` revised T3–T5 and the risk register (§3.1). **CW-A (test-evidence fixes) was completed on 2026-10-06 and committed as `5d9c667` (2026-10-06 18:04:06 +08:00; test files only); verification was performed on the working tree before that commit.**
+Updated: **2026-10-09 (Asia/Shanghai)**. **T3.1 (callback capacity and failed-callback state) was closed locally on 2026-10-09; its tests are in `test/unit/RaffleCapacityTest.t.sol` (committed as `f84ed33` and `dd6476f`), evidence in [records](records/records.md).** T2's verified test changes are committed as **`ab42ee0`** (2026-10-05 17:44:22 +08:00); verification was performed before that commit. The September 28 planning review used `01a26a9`; T1's reproducibility evidence remains tied to `70d1941`. A pre-T3 planning review on 2026-10-05 at `eef8499` revised T3–T5 and the risk register (§3.1). **CW-A (test-evidence fixes) was completed on 2026-10-06 and committed as `5d9c667` (2026-10-06 18:04:06 +08:00; test files only); verification was performed on the working tree before that commit.**
 
 ## 1. Purpose and ownership
 
@@ -12,14 +12,14 @@ The intended outcome is an explainable Solidity/Foundry testnet project with def
 
 ## 2. Current position and evidence
 
-**Assessment:** local implementation, T1 reproducibility checks, scoped T2 accounting verification, and snapshot integration are recorded. T2 is closed within the aggregate-only model; the per-actor stateful reference ledger is explicitly deferred. CW-A is closed: the false-green fulfillment test now asserts post-state, and the invariant withdraw handler is steered with an `afterInvariant` reachability guard. T3 is next and now includes a binding capacity decision (D1): an exploratory probe found the settlement callback fails from 74 players under the configured 500000 gas. Optional fork deployment remains separate.
+**Assessment:** local implementation, T1 reproducibility checks, scoped T2 accounting verification, and snapshot integration are recorded. T2 is closed within the aggregate-only model; the per-actor stateful reference ledger is explicitly deferred. CW-A is closed: the false-green fulfillment test now asserts post-state, and the invariant withdraw handler is steered with an `afterInvariant` reachability guard. T3.1 is closed locally: committed tests reproduce the capacity boundary (callback succeeds at 73 players, fails at 74, in a fresh raffle under the configured 500000 gas) and the failed-callback state. T3.2 (privilege boundaries), T3.3 and the binding capacity decision (D1) remain. Optional fork deployment remains separate.
 
 | Area | Evidence and boundary | State |
 | --- | --- | --- |
 | Raffle and pull payment | `OPEN → CALCULATING → OPEN`; fulfillment credits claims; separate CEI withdrawal; rejecting receivers no longer block settlement through payout | Implemented / locally tested |
 | Accounting | Reserved prizes, repeated-winner accumulation, delayed-round withdrawal, and exact credit/withdrawal event assertions | Scoped T2 complete locally |
 | Stateful invariants | Solvency, actual claim-sum reconciliation, entry/withdrawal conservation, and balance = liabilities + independently modeled pot | Four invariants locally tested; zero-start/no-untracked-ETH model; per-actor reference ledger deferred. Withdraw steering plus an `afterInvariant` guard (≥ 1 successful withdrawal per run) make the withdrawal path observable (CW-A) |
-| Callback capacity | Exploratory probe (2026-10-05, not committed): success at ≤ 73 players, failure at ≥ 74 under a cold-storage model; failure leaves `CALCULATING` permanently | Planning evidence only; T3.1 test and D1 decision pending |
+| Callback capacity | T3.1 tests (2026-10-09, cold-slot via `vm.cool`; same result under `--isolate`): success at 73 players (callback 498,420 gas), failure at 74; N = 20 callback 201,567 gas (margin 298,433). Failure leaves `CALCULATING`, request consumed, pot locked; earlier claims stay withdrawable. Threshold is state-dependent (a later round is ~34,200 gas cheaper), fresh raffle is the worst case | Locally tested; build-specific; independent `protocol_test_engineer` check and D1 decision pending |
 | Owner/coordinator powers | Inherited `setCoordinator` (owner or coordinator) plus unchecked request ID lets the owner choose any round's winner | Identified by review; executable characterization pending (T3.2) |
 | Configuration/deployment | Four HelperConfig tests; integrated local deployment/ownership/consumer test | Locally tested; some signer cases remain |
 | Build and test lanes | Foundry `v1.7.1` selected in CI; Solc `0.8.35` and EVM settings pinned; local checks reproduced at `70d1941` without Sepolia credentials; 47 passed at `eef8499` | T1 locally verified; hosted CI run `37448187929` passed at `ba12f31` (T1.1; RPC-free lane only) |
@@ -33,7 +33,7 @@ The intended outcome is an explainable Solidity/Foundry testnet project with def
 
 ### Verification ledger
 
-Current RPC-free baseline: **47 passed, 0 failed, 0 skipped** (T2 closure; rerun at `eef8499` on 2026-10-05). The table below is the historical planning-review run at `01a26a9`, 2026-09-28:
+Current RPC-free baseline: **51 passed, 0 failed, 0 skipped** (47 at T2 closure plus 4 `RaffleCapacityTest` tests, run 2026-10-09 on the working tree). Previous baseline: 47 (T2 closure; rerun at `eef8499` on 2026-10-05). The table below is the historical planning-review run at `01a26a9`, 2026-09-28:
 
 | Command | Result |
 | --- | --- |
@@ -50,6 +50,8 @@ Commands used `/home/ZKdev/.foundry/bin/forge` on this server. No fork RPC check
 **T2 closure (2026-10-05):** the scoped regressions, four aggregate invariants, and exact `WinningCredited` assertion passed the RPC-free local suite; formatting and build-size checks passed. Commands/results and the deferred per-actor model are recorded in [records](records/records.md). No new fork, coverage, broadcast, or live VRF evidence is implied.
 
 **CW-A closure (2026-10-06):** `test_fulfillmentConsumesRequest_WhenRequestIsValid` now asserts `OPEN`, empty players, winner, claim and settlement timestamp, and was shown to fail when the callback reverts (mutation, since restored). The invariant `withdraw` handler scans from the seeded actor to the next actor with a claim, and `afterInvariant` requires at least one successful withdrawal per run. RPC-free suite: 47 passed, 0 failed, 0 skipped; `forge fmt --check` passed; the 128-run guard passed for the default seed and seeds 42, 1234 and 7. Single-run samples of effective actions are in [records](records/records.md). These are local results from the working tree later committed as `5d9c667`; they have not run on hosted CI and are not callback-gas evidence (warm storage; T3.1).
+
+**T3.1 closure (2026-10-09):** `RaffleCapacityTest` (4 tests) uses `vm.cool` after `performUpkeep` so the clearing cost is cold, and reads callback success from the mock's `RandomWordsFulfilled` event plus Raffle post-state. Pair: 73 passes, 74 fails (pinned build: Foundry `1.7.1`, solc `0.8.35`, optimizer off, limit 500000). The tests passed in plain and `--isolate` runs; `forge fmt --check` passed; RPC-free lane 51 passed. A multi-round test shows an earlier claim stays withdrawable while a later round is stuck (explicit `fundSubscription` top-up). The threshold depends on storage state: after an unclaimed round 1, `s_recentWinner` and the outstanding claims are already non-zero, so the callback is ~34,200 gas cheaper; a fresh raffle is the most expensive case (inference), so D1 should be based on 73. The `vm.cool` mutation (N = 74 succeeds without it) was a primary-agent check on a temporary copy; independent `protocol_test_engineer` verification is still pending. Not callback-security evidence beyond this build and mock; mock billing is not live billing.
 
 ## 3. Review of the previous plan
 
@@ -93,7 +95,7 @@ Confirmed unchanged: T3 → T4 → 5A ordering, manual-trigger C1, the 500000 li
 | Milestone | Deliverable | Exit criterion | Status / task mapping |
 | --- | --- | --- | --- |
 | M0 — Core implementation | Raffle state machine, subscription scripts, pull-payment settlement | Core flow and payout regression tests | Complete locally |
-| M1 — Verification and reproducibility | Explicit build/CI baseline, stronger accounting tests, callback and privilege characterization, capacity decision | Required local tests pass; D1 recorded and any fix regression-tested and re-reviewed; material findings addressed or explicitly bounded | T1 locally verified, hosted run recorded (T1.1); scoped T2 closed; CW-A closed locally (`5d9c667`); T3 + D1 pending |
+| M1 — Verification and reproducibility | Explicit build/CI baseline, stronger accounting tests, callback and privilege characterization, capacity decision | Required local tests pass; D1 recorded and any fix regression-tested and re-reviewed; material findings addressed or explicitly bounded | T1 locally verified, hosted run recorded (T1.1); scoped T2 closed; CW-A closed locally (`5d9c667`); T3.1 closed locally (2026-10-09); T3.2, T3.3 and D1 pending |
 | M2 — External compatibility | Pinned fork evidence; signer/subscription decision; fresh configuration/owner/funding check; reviewed deployment simulation of the post-D1 revision | Snapshot and current assumptions recorded separately | B1 recorded; T4 (+D2) pending; B2 optional |
 | M3 — Live integration | One real Sepolia VRF round and withdrawal with manual upkeep trigger | Public receipts tie final source/config to successful callback and accounting | Pending: Gate 5A |
 | M4 — Explainable closure | Concise testing/security evidence, residual risks and operational procedure | User can explain major design/failure paths; documentation matches final revision | Start alongside M1, finish through T5 |
@@ -138,8 +140,8 @@ These labels are not a cumulative safety rating. Coverage and test counts measur
 | --- | --- | --- |
 | R1 | Rejecting winner previously blocked push-payment settlement | Mitigated locally by pull payments and regression tests; preserve coverage |
 | R2 | Aggregate totals can be correct without correct individual allocation | T2 verifies aggregate reconciliation/conservation and retains individual unit/fuzz regressions; per-actor stateful reference ledger deferred on 2026-10-05, not claimed as verified |
-| R3 | Missing or failed fulfillment leaves `CALCULATING` permanently; the round pot is locked; failed callbacks are billed and never retried | T3.1 asserts the exact failed state; T4 defines stop/inspect response; the owner override (R5) is the only exit and is not a fair recovery; recovery redesign separate |
-| R4 | Uncapped player array is cleared under fixed callback gas; probe: failure at ≥ 74 players (cold model, 500000, pinned build); griefable for ~0.74 Sepolia ETH | **D1 before T4:** recommended enforced cap with margin (Builder → regression → re-review), or recorded acceptance; same-transaction tests are invalid evidence |
+| R3 | Missing or failed fulfillment leaves `CALCULATING` permanently; the round pot is locked; failed callbacks are billed and never retried | T3.1 asserts the exact failed state (done locally 2026-10-09); T4 defines stop/inspect response; the owner override (R5) is the only exit and is not a fair recovery; recovery redesign separate |
+| R4 | Uncapped player array is cleared under fixed callback gas; T3.1 measured: fresh raffle succeeds at 73, fails at 74 (cold model, 500000, pinned build; later rounds are cheaper, so 73 is the conservative bound); griefable for ~0.74 Sepolia ETH | **D1 before T4:** recommended enforced cap with margin (Builder → regression → re-review), or recorded acceptance; same-transaction tests are invalid evidence |
 | R5 | Inherited `setCoordinator` callable by owner or current coordinator; with R6 this lets the owner choose any round's winner and take the pot, even while `OPEN` with no request | T3.2 tests the boundary and the override sequence; accepted owner-trust assumption for this testnet milestone (not `virtual`; removal is a redesign); state it in T5; never use it to complete the live demo |
 | R6 | Callback ignores request ID/state validation and assumes a nonempty word array | Trusted coordinator + one request at a time is the current model; exercised by the T3.2 override test; validation alone would not stop R5 (the request ID is public); revisit before concurrent requests, migration or recovery |
 | R7 | Permanently rejecting winner cannot withdraw its own claim | Accepted limitation for this testnet milestone; claim remains reserved and later rounds proceed; alternate recipient conditional |
@@ -188,6 +190,7 @@ Finish this repository when required local hardening and the chosen integration 
 | `ab42ee0`, 2026-10-05 | Scoped T2 closed locally; aggregate pot model and credit-event assertion verified before commit; per-actor stateful ledger deferred |
 | `eef8499` + planning review, 2026-10-05 | Pre-T3 review: capacity probe (73/74), owner-override, LINK-drain and signer findings; T3/T4 restructured around D1/D2 |
 | `5d9c667`, 2026-10-06 | CW-A: fulfillment test asserts post-state (shown to fail on a reverting callback); invariant `withdraw` steered with an `afterInvariant` withdrawal guard; test-only |
+| `f84ed33`, `dd6476f`, 2026-10-09 | `RaffleCapacityTest`: cold-slot capacity pair 73/74, failed-callback state, multi-round claim test; state-dependent threshold finding for D1; test-only |
 
 Relevant implementation: [Raffle](src/Raffle.sol), [deployment](script/DeployRaffle.s.sol), [configuration](script/HelperConfig.s.sol), [interactions](script/Interactions.s.sol).
 

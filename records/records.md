@@ -570,7 +570,7 @@ Baseline commit `ba12f31538e4cc24455f0c9ff3ec3aae0f8bac2d`; push-triggered run #
 - Ran 4 test suites in 2.41s (2.99s CPU time): `47 tests passed, 0 failed, 0 skipped` (47 total tests)
 - **Boundary:** RPC-free lane only (fork tests excluded); it shows the pinned Foundry version ran and the local suite reproduces on a clean hosted runner. It is not fork (B1) evidence, a security review, or callback-gas evidence. Runs #31-#34 on earlier pushes also concluded `success`.
 
-## 10.7
+## 10.7 ~ 10.9
 ### T3 - Gas-test methodology
 Problems:
 - When Clear a cold slot (`s_players = new address payable[](0)` in `Raffle.sol:166`), total gas grows linearly with N (N > 73 will exceed the gas limit, casuing a failure).
@@ -587,13 +587,27 @@ Created two helper functions:
 - `_EntersSpecificAmountDistinctPlayers(uint256 amount)`: enters `amount` distinct players, returns the request ID.
 - `_FulfillRequest(uint256 requestId)`: fulfills the request, returns the `success` variable (records the outcome of the fulfillment).
 
-Gas limit is `500000` and model **estimation**:
-- `gas ≈ 96,500 + 5,600 * (N - 1)`;
-- N = 20，actual gas ≈ 202,900 (actual 201,567 , 相差 0.66%) => Pass;
-- N = 73, gas ≈  499,700 (actual 498,420) => Pass;
-- N = 74, gas ≈  505,300 => Fail (`success = false`);
-- The [Test runs in 2026.10.8](../test/unit/RaffleCapacityTest.t.sol) agree with above cases (plain runs and `--isolate` runs). 
+Gas limit is `500000` and model **estimation**: `gas ≈ 96,500 + 5,600 * (N - 1)`.
+
+Measured callback gas (nested `Raffle::rawFulfillRandomWords` in `-vvvv`, plain mode, excludes mock overhead):
+- N = 20: 201,567 (model 202,900, diff 0.66%) => Pass, margin 298,433;
+- N = 73: 498,420 (model 499,700) => Pass, margin 1,580;
+- N = 74: model 505,300 => Fail (`success = false`, callback runs out of the full 500,000).
+
+The [tests](../test/unit/RaffleCapacityTest.t.sol) (2026.10.9) pass in plain and `--isolate` runs: 4 passed in the file, RPC-free lane 51 passed, `fmt --check` passed. Not tested: N < 73 and N > 74 in a fresh raffle.
+
+#### Failed-callback state (N = 74)
+- `success = false`; the request is consumed (re-fulfillment reverts `InvalidRequest`); state stays `CALCULATING`; no winner, no claim; pot stays in the contract.
+- `enterRaffle` reverts `RaffleNotOpen`, `performUpkeep` reverts `UpkeepNotNeeded`.
+- The locked pot has no contract recovery path except the owner override (T3.2).
+- An earlier claim stays withdrawable while round 2 is `CALCULATING`. Round 2 needs `fundSubscription` first (one mock fulfillment costs ~62.6 of 100 LINK).
+
+#### Finding for D1: the cliff depends on storage state
+- After an unclaimed round 1, `s_recentWinner` and `s_totalOutstandingClaims` are already non-zero. Rewriting them costs ~5,000 instead of ~22,100 (`0 -> non-zero`), so the callback is ~34,200 gas cheaper. Round 2 with N = 74 succeeded (469,821); the round-2 test uses N = 85, which fails (EVM reports `ReentrancySentryOOG`, still gas exhaustion).
+- Fresh raffle is the most expensive state (inference), so a cap should be based on 73, not on later rounds.
+- Round-2 boundary ≈ 79/80 (direct-call experiment, not committed, provisional).
 
 Notes
-- `vm.cool` must placed after `performUpkeep` and no reads between `vm.cool` and `fulfillment`.
-- The mutation result is run on a temporary copy, not an independent sign-off.
+- `vm.cool` must be placed after `performUpkeep`, and no Raffle reads between `vm.cool` and fulfillment.
+- Mutation (primary agent, temporary copy, not an independent sign-off): without `vm.cool` the N = 74 callback succeeds (warm slots), so its `assertFalse(success)` fails; N = 20 and 73 stay green.
+- Open: independent `protocol_test_engineer` check, D1 decision.

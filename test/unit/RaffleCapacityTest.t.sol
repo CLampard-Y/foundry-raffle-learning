@@ -133,7 +133,7 @@ contract RaffleCapacityTest is Test {
         raffle.performUpkeep("");
     }
 
-    function test_EalierClaimStillWithrawable_WhenSecondRoundFulfillmentFails() public {
+    function test_EarlierClaimStillWithdrawable_WhenSecondRoundFulfillmentFails() public {
         // Round 1: settle PLAYER's prize and leave it unclaimed.
         vm.prank(PLAYER);
         raffle.enterRaffle{value: entranceFee}();
@@ -152,7 +152,6 @@ contract RaffleCapacityTest is Test {
         VRFCoordinatorV2_5Mock(vrfCoordinator).fundSubscription(subscriptionId, 100 ether);
         uint256 N = 85;
         uint256 secondRoundRequestId = _EntersSpecificAmountDistinctPlayers(N);
-        uint256 balanceBefore = address(raffle).balance;
         bool success = _FulfillRequest(secondRoundRequestId);
 
         // Assert: Second round fulfillment fails.
