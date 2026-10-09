@@ -133,6 +133,44 @@ contract RaffleCapacityTest is Test {
         raffle.performUpkeep("");
     }
 
+    function test_EalierClaimStillWithrawable_WhenSecondRoundFulfillmentFails() public {
+        // Round 1: settle PLAYER's prize and leave it unclaimed.
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+        vm.warp(block.timestamp + interval);
+        uint256 firstRoundRequestId = _performUpkeepAndGetRequestId();
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(firstRoundRequestId, address(raffle));
+
+        uint256 firstRoundExpectedPrize = entranceFee;
+        assertEq(raffle.getRecentWinner(), PLAYER);
+        assertEq(raffle.getClaimableWinnings(PLAYER), firstRoundExpectedPrize);
+
+        // Round 2: enter 85 players and fulfill.
+        // Round 1 left the prize unclaimed, `s_recentWinner` is already non-zero,
+        // which makes the raffle non-fresh, reducing the gas cost.
+        // Add extra mock subscription funding to prevent second round from insufficient balance.
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fundSubscription(subscriptionId, 100 ether);
+        uint256 N = 85;
+        uint256 secondRoundRequestId = _EntersSpecificAmountDistinctPlayers(N);
+        uint256 balanceBefore = address(raffle).balance;
+        bool success = _FulfillRequest(secondRoundRequestId);
+
+        // Assert: Second round fulfillment fails.
+        assertFalse(success);
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING));
+
+        // PLAYER withdraws the prize.
+        uint256 balanceOfPlayerBefore = PLAYER.balance;
+        uint256 outstandingClaimsBefore = raffle.getTotalOutstandingClaims();
+        vm.prank(PLAYER);
+        raffle.withdrawWinnings();
+        uint256 balanceOfPlayerAfter = PLAYER.balance;
+        uint256 outstandingClaimsAfter = raffle.getTotalOutstandingClaims();
+
+        assertEq(balanceOfPlayerAfter - balanceOfPlayerBefore, firstRoundExpectedPrize);
+        assertEq(outstandingClaimsBefore - outstandingClaimsAfter, firstRoundExpectedPrize);
+    }
+
     // ============================================================
     //                    helper functions
     // ============================================================
