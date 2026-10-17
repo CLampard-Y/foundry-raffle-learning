@@ -8,6 +8,7 @@ import {VRFCoordinatorV2_5Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VR
 import {Raffle} from "../../src/Raffle.sol";
 import {DeployRaffle} from "../../script/DeployRaffle.s.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
+import {AddConsumer} from "../../script/Interactions.s.sol";
 
 /**
  * @dev This contract test the raffle capacity.
@@ -60,8 +61,9 @@ contract RaffleCapacityTest is Test {
      */
     function test_FulfillmentSuccess_WhenAmountEqualstoTwenty() public {
         uint256 N = 20;
-        uint256 requestId = _EntersSpecificAmountDistinctPlayers(N);
-        bool success = _FulfillRequest(requestId);
+        _entersSpecificAmountDistinctPlayers(N);
+        uint256 requestId = _performUpkeepAndGetRequestIdInCool();
+        bool success = _fulfillRequest(requestId);
 
         // Assert: success (true), state (OPEN), player count (0),
         // recent winner and his claim (N * entranceFee),
@@ -75,16 +77,20 @@ contract RaffleCapacityTest is Test {
 
     /**
      * @dev Tests the fulfillment still success scenario when the number of
-     * players is equal to largest passing size (seventy-three).
+     * players is equal to cap (sixty).
      */
-    function test_FulfillmentSuccess_WhenAmountEqualstoLargestPassingSize() public {
-        uint256 N = 73;
-        uint256 requestId = _EntersSpecificAmountDistinctPlayers(N);
-        bool success = _FulfillRequest(requestId);
+    function test_FulfillmentSuccess_WhenPlayersAmountEqualstoCap() public {
+        // Arrange
+        uint256 N = raffle.getMaxAmountOfPlayers();
+
+        // Act
+        _entersSpecificAmountDistinctPlayers(N);
+        uint256 requestId = _performUpkeepAndGetRequestIdInCool();
+        bool success = _fulfillRequest(requestId);
 
         // Assert: success (true), state (OPEN), player count (0),
         // recent winner and his claim (N * entranceFee),
-        // totaloustanding equals to balance,
+        // totaloustanding equals to balance.
         assertTrue(success);
         assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
         assertEq(raffle.getPlayersLength(), 0);
@@ -93,80 +99,133 @@ contract RaffleCapacityTest is Test {
     }
 
     /**
-     * @dev Tests the fulfillment fails scenario when the number of
-     * players is equal to first failing size (seventy-four).
+     * @dev Tests having entered the cap (60) players, the contract rejects
+     * one more player and remains unchanged.
      */
-    function test_FulfillmentFailsWhenAmountEqualstoFirstFailingSize() public {
-        uint256 N = 74;
-        uint256 requestId = _EntersSpecificAmountDistinctPlayers(N);
-        uint256 balanceBefore = address(raffle).balance;
-        bool success = _FulfillRequest(requestId);
+    function test_MoreEnterFails_WhenPlayersAmountEqualsCap() public {
+        // Arrange: N equals to the cap (maximum amount of players) plus one.
+        uint256 N = raffle.getMaxAmountOfPlayers() + 1;
 
-        // Assert: success (false), state (CALCULATING), player count (N),
-        // recent winner (address(0)) -> no winner
-        // totaloustanding equals to zero.
+        // Act
+        // First round: Enter Cap players (success).
+        _entersSpecificAmountDistinctPlayers(N - 1);
+        uint256 playersLengthBeforeSecondRound = raffle.getPlayersLength();
+        uint256 balanceBeforeSecondRound = address(raffle).balance;
+        assertEq(playersLengthBeforeSecondRound, N - 1);
+        assertEq(balanceBeforeSecondRound, (N - 1) * entranceFee);
+
+        // Second round: Enter one more player (revert: TheAmountOfPlayersExceedLimit).
+        vm.expectRevert(Raffle.Raffle__TheAmountOfPlayersExceedLimit.selector);
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+        uint256 playersLengthAfterSecondRound = raffle.getPlayersLength();
+        uint256 balanceAfterSecondRound = address(raffle).balance;
+
+        // Assert: Enter one more player fails and
+        // contract remains unchanged (players length, balance).
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
+        assertEq(playersLengthAfterSecondRound, playersLengthBeforeSecondRound);
+        assertEq(balanceAfterSecondRound, balanceBeforeSecondRound);
+    }
+
+    /**
+     * @dev Failed-callback test: Fulfillment fails when the gas limit is
+     * exceeded (using custom small limit raffle):
+     * 1. Custom raffle uses a gas limit of 300000 (< measured 425,607).
+     * 2. Enter 60 players (the cap).
+     */
+    function test_FulfillmentFails_WhenGasLimitExceeded() public {
+        _useSmallLimitRaffle(300000);
+        uint256 N = raffle.getMaxAmountOfPlayers();
+        _entersSpecificAmountDistinctPlayers(N);
+
+        uint256 requestId = _performUpkeepAndGetRequestIdInCool();
+        uint256 balanceBeforeFulfillment = address(raffle).balance;
+        bool success = _fulfillRequest(requestId);
+        uint256 balanceAfterFulfillment = address(raffle).balance;
+
+        // Assert
         assertFalse(success);
-        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING));
-        assertEq(raffle.getPlayersLength(), N);
-        assertEq(raffle.getRecentWinner(), address(0));
+        assertEq(balanceAfterFulfillment, balanceBeforeFulfillment);
         assertEq(raffle.getTotalOutstandingClaims(), 0);
 
-        // Assert: fulfillment again fails (request id already consumed),
-        // enter and performUpkeep rejected,
-        // balance stays unchanged.
+        // The same request can't be fulfilled again
         vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(requestId, address(raffle));
 
+        assertEq(raffle.getPlayersLength(), N);
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING));
+        assertEq(raffle.getRecentWinner(), address(0));
+
+        // No more players can enter
         vm.expectRevert(Raffle.Raffle__RaffleNotOpen.selector);
         vm.prank(PLAYER);
         raffle.enterRaffle{value: entranceFee}();
 
-        assertEq(address(raffle).balance, balanceBefore);
+        // No more peformUpkeep can be called
         vm.expectRevert(
             abi.encodeWithSelector(
                 Raffle.Raffle__UpkeepNotNeeded.selector,
-                balanceBefore, // balance
-                74, // players length
+                balanceAfterFulfillment, // balance
+                N, // players length
                 Raffle.RaffleState.CALCULATING // state
             )
         );
         raffle.performUpkeep("");
     }
 
+    /**
+     * @dev Tests that the earlier round winner can still withdraw their winnings as expected
+     *  while the second round fulfillment fails due to gas limit exceeded.
+     */
     function test_EarlierClaimStillWithdrawable_WhenSecondRoundFulfillmentFails() public {
-        // Round 1: settle PLAYER's prize and leave it unclaimed.
-        vm.prank(PLAYER);
-        raffle.enterRaffle{value: entranceFee}();
-        vm.warp(block.timestamp + interval);
-        uint256 firstRoundRequestId = _performUpkeepAndGetRequestId();
-        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(firstRoundRequestId, address(raffle));
-
-        uint256 firstRoundExpectedPrize = entranceFee;
-        assertEq(raffle.getRecentWinner(), PLAYER);
-        assertEq(raffle.getClaimableWinnings(PLAYER), firstRoundExpectedPrize);
-
-        // Round 2: enter 85 players and fulfill.
-        // Round 1 left the prize unclaimed, `s_recentWinner` is already non-zero,
-        // which makes the raffle non-fresh, reducing the gas cost.
         // Add extra mock subscription funding to prevent second round from insufficient balance.
         VRFCoordinatorV2_5Mock(vrfCoordinator).fundSubscription(subscriptionId, 100 ether);
-        uint256 N = 85;
-        uint256 secondRoundRequestId = _EntersSpecificAmountDistinctPlayers(N);
-        bool success = _FulfillRequest(secondRoundRequestId);
 
-        // Assert: Second round fulfillment fails.
+        _useSmallLimitRaffle(300000);
+
+        // Round 1: Enter N = 20 players and fulfill.
+        uint256 N = 20;
+        _entersSpecificAmountDistinctPlayers(N);
+        uint256 requestId = _performUpkeepAndGetRequestIdInCool();
+        bool success = _fulfillRequest(requestId);
+
+        // Assert: Round 1 fulfillment success and raffle resets.
+        assertTrue(success);
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
+        assertEq(raffle.getPlayersLength(), 0);
+        assertEq(raffle.getTotalOutstandingClaims(), address(raffle).balance);
+
+        // Record round 1 winner and assert.
+        address firstRoundWinner = raffle.getRecentWinner();
+        uint256 firstRoundExpectedPrize = N * entranceFee;
+        assertEq(raffle.getTotalOutstandingClaims(), firstRoundExpectedPrize);
+        assertEq(raffle.getClaimableWinnings(firstRoundWinner), firstRoundExpectedPrize);
+
+        // Round 2: Enter N = cap players and fulfill (fails due to gas limit).
+        N = raffle.getMaxAmountOfPlayers();
+        _entersSpecificAmountDistinctPlayers(N);
+        uint256 firstRoundWinnerBalanceBeforeWithdrawal = firstRoundWinner.balance;
+        requestId = _performUpkeepAndGetRequestIdInCool();
+        success = _fulfillRequest(requestId);
+
+        // Assert: Second round fulfillment fails and raffle remains unchanged.
         assertFalse(success);
         assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING));
+        assertEq(raffle.getPlayersLength(), N);
+        assertEq(raffle.getRecentWinner(), firstRoundWinner);
+        assertEq(address(raffle).balance, firstRoundExpectedPrize + (N * entranceFee));
 
-        // PLAYER withdraws the prize.
-        uint256 balanceOfPlayerBefore = PLAYER.balance;
+        // First round winner withdraws the prize.
         uint256 outstandingClaimsBefore = raffle.getTotalOutstandingClaims();
-        vm.prank(PLAYER);
+        vm.prank(firstRoundWinner);
         raffle.withdrawWinnings();
-        uint256 balanceOfPlayerAfter = PLAYER.balance;
+        uint256 firstRoundWinnerBalanceAfterWithdrawal = firstRoundWinner.balance;
         uint256 outstandingClaimsAfter = raffle.getTotalOutstandingClaims();
 
-        assertEq(balanceOfPlayerAfter - balanceOfPlayerBefore, firstRoundExpectedPrize);
+        assertEq(
+            firstRoundWinnerBalanceAfterWithdrawal - firstRoundWinnerBalanceBeforeWithdrawal, firstRoundExpectedPrize
+        );
         assertEq(outstandingClaimsBefore - outstandingClaimsAfter, firstRoundExpectedPrize);
     }
 
@@ -198,20 +257,24 @@ contract RaffleCapacityTest is Test {
 
     /**
      * @dev Enters specific amount of distinct players into the raffle
-     * and turn the slot cool.
-     * @notice No raffle reads between this helper and the fulfillment,
-     * it will turn the slot into warm.
      * @param amount - The amount of players to enter.
-     * @return requestId - The request ID of the VRF request.
      */
-    function _EntersSpecificAmountDistinctPlayers(uint256 amount) internal returns (uint256 requestId) {
+    function _entersSpecificAmountDistinctPlayers(uint256 amount) internal {
         for (uint256 i = 0; i < amount; i++) {
             address player = makeAddr(string.concat("raffle actor", vm.toString(i)));
             hoax(player, STARTING_USER_BALANCE);
             raffle.enterRaffle{value: entranceFee}();
         }
         assertEq(raffle.getPlayersLength(), amount);
+    }
 
+    /**
+     * @dev Performs upkeep and returns requestId in cool state.
+     * @notice No raffle reads between this helper and the fulfillment,
+     * it will turn the slot into warm.
+     * @return requestId - The request ID of the VRF request.
+     */
+    function _performUpkeepAndGetRequestIdInCool() internal returns (uint256 requestId) {
         vm.warp(block.timestamp + interval);
         requestId = _performUpkeepAndGetRequestId();
         vm.cool(address(raffle));
@@ -225,7 +288,7 @@ contract RaffleCapacityTest is Test {
      * @param requestId - The request ID of the VRF request.
      * @return success - Whether the fulfillment was successful.
      */
-    function _FulfillRequest(uint256 requestId) internal returns (bool success) {
+    function _fulfillRequest(uint256 requestId) internal returns (bool success) {
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(requestId, address(raffle));
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -242,5 +305,14 @@ contract RaffleCapacityTest is Test {
         }
 
         revert("RandomWordsFulfilled event not found");
+    }
+
+    /**
+     * @dev
+     */
+    function _useSmallLimitRaffle(uint32 limit) internal {
+        Raffle small = new Raffle(entranceFee, interval, vrfCoordinator, gasLane, subscriptionId, limit);
+        new AddConsumer().addConsumer(address(small), vrfCoordinator, subscriptionId, helperConfig.getDeployerKey());
+        raffle = small;
     }
 }

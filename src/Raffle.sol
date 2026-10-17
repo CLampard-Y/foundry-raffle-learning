@@ -6,14 +6,15 @@ import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFCo
 import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 
 /**
- * @title A sample Raffle Contract
- * @author CLampard-Y
- * @notice This contract is for creating a sample raffle
- * @dev It implements Chainlink VRFv2.5 and Chainlink Automation
+ * @title A sample Raffle Contract.
+ * @author CLampard-Y.
+ * @notice This contract is for creating a sample raffle.
+ * @dev It implements Chainlink VRFv2.5.
  */
 contract Raffle is VRFConsumerBaseV2Plus {
     /* Errors */
     error Raffle__NotEnoughEthSent();
+    error Raffle__TheAmountOfPlayersExceedLimit();
     error Raffle__TransferFailed();
     error Raffle__RaffleNotOpen();
     error Raffle__UpkeepNotNeeded(uint256 balance, uint256 playersLength, uint256 raffleState);
@@ -28,6 +29,8 @@ contract Raffle is VRFConsumerBaseV2Plus {
     /* State Variables */
     uint16 private constant REQUEST_CONFIRMATIONS = 3;
     uint32 private constant NUM_WORDS = 1;
+    // The maximum number of players in a raffle.
+    uint256 private constant MAX_PLAYERS = 60;
 
     uint256 private immutable i_entranceFee;
     // @dev Duration of the lottery in seconds
@@ -71,10 +74,21 @@ contract Raffle is VRFConsumerBaseV2Plus {
         s_totalOutstandingClaims = 0;
     }
 
+    /**
+     * @dev Calling this function allows a user to enter the raffle
+     *  when meeting the entrance fee and other requirements.
+     * @dev The cap of players amount (60) ensures the callback
+     *  finish within the 500,000 gas limit.
+     */
     function enterRaffle() external payable {
-        if (msg.value < i_entranceFee) revert Raffle__NotEnoughEthSent();
+        if (msg.value < i_entranceFee) {
+            revert Raffle__NotEnoughEthSent();
+        }
         if (s_raffleState != RaffleState.OPEN) {
             revert Raffle__RaffleNotOpen();
+        }
+        if (s_players.length >= MAX_PLAYERS) {
+            revert Raffle__TheAmountOfPlayersExceedLimit();
         }
 
         s_players.push(payable(msg.sender));
@@ -82,16 +96,14 @@ contract Raffle is VRFConsumerBaseV2Plus {
     }
 
     /**
-     * @dev This is the function that the Chainlink nodes will call to see
+     * @dev This is the function that can be called to check
      * if the lottery is ready to have a winner picked.
      * The following should be true in order for upkeepNeeded to be true:
      * 1. The time interval has passed between raffle runs
      * 2. The lottery is open
      * 3. The contract has ETH and players
-     * 4. Implicitly, your subscription has LINK
-     * @param -ignored
      * @return upkeepNeeded - true if it's time to restart the lottery
-     * @return - ignored
+     * @return performData - ignored
      */
     function checkUpkeep(
         bytes memory /* checkData */
@@ -142,8 +154,9 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
     /**
      * @dev Only calculates and records winner and prize.
-     * @dev Don't call transfer() in this function
-     * to prevent reentrancy attacks (e.g. rejecting winner).
+     * @dev Separate fulfillment and withdraw into two different functions
+     *  to ensure fulfillment runs without reverting when withdrawing fails
+     *  (e.g. rejecting winner).
      */
     function fulfillRandomWords(
         uint256,
@@ -194,6 +207,10 @@ contract Raffle is VRFConsumerBaseV2Plus {
     /**
      * Getter Functions
      */
+    function getMaxAmountOfPlayers() public pure returns (uint256) {
+        return MAX_PLAYERS;
+    }
+
     function getEntranceFee() public view returns (uint256) {
         return i_entranceFee;
     }
