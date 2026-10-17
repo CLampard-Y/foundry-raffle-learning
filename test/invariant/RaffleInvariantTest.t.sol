@@ -53,6 +53,10 @@ contract RaffleHandler is Test {
             return;
         }
 
+        if (raffle.getPlayersLength() >= raffle.getMaxAmountOfPlayers()) {
+            return;
+        }
+
         uint256 actorCount = s_actors.length;
         uint256 actorIndex = actorSeed % actorCount;
         address actor = s_actors[actorIndex];
@@ -224,6 +228,21 @@ contract RaffleInvariantTest is StdInvariant, Test {
         //Both seeds select the same actor.
         assertEq(raffle.getPlayerByIndex(0), actor);
         assertEq(raffle.getPlayerByIndex(1), actor);
+    }
+
+    function test_HandlerRejectsEnter_WhenAmountEquelsMaxPlayers() public {
+        // Enter Cap + 10 players by looping.
+        uint256 E = raffle.getEntranceFee();
+        uint256 N = raffle.getMaxAmountOfPlayers();
+        for (uint256 i = 0; i < N + 10; i++) {
+            handler.enter(i % 8);
+        }
+
+        // Assert: Only N players were accepted.
+        assertEq(raffle.getPlayersLength(), N);
+        assertEq(handler.enterCalls(), N);
+        assertEq(handler.currentRoundPot(), N * E);
+        assertEq(handler.totalEntered(), N * E);
     }
 
     function test_HandlerTracksCumulativeWithdrawals_AcrossRounds() public {

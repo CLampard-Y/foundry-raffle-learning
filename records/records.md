@@ -611,3 +611,24 @@ Notes
 - `vm.cool` must be placed after `performUpkeep`, and no Raffle reads between `vm.cool` and fulfillment.
 - Mutation (primary agent, temporary copy, not an independent sign-off): without `vm.cool` the N = 74 callback succeeds (warm slots), so its `assertFalse(success)` fails; N = 20 and 73 stay green.
 - Open: independent `protocol_test_engineer` check, D1 decision.
+
+## 10.10 ~ 10.17
+### D1 - Capacity decision
+Capacity decision: 
+- Set a player cap.
+- Cap = 60. 线性模型预测回调约 426,900 gas(96,500 + 5,600 × 59),余量约 73,100(14.6%);实测新鲜状态阈值是 73(余量仅 1,580)。live 协调器的包装开销未测,所以保留余量。
+
+Changes:
+- Add `getMaxAmountOfPlayers()` to `Raffle.sol`.
+- Add `test_FulfillmentSuccess_WhenPlayersAmountEqualstoCap()` to `RaffleCapacityTest.t.sol`.
+- Add failed-callback test and multiple-round test to `RaffleCapacityTest.t.sol`.
+  - The failed-callback test and multiple-round test on a second Raffle with a custom small limit;
+  - Callback gas at the cap (60 players, fresh, cold): 425,607 measured; margin to 500,000 = 74,393;
+  - Small limit tests use `callbackGasLimit = 300,000`, the failed-callback test fails with a 125,607 gap; the multiple-round test fails in round 2.
+- Remove `test_FulfillmentFailsWhenAmountEqualstoFirstFailingSize()` and `test_FulfillmentFailsWhenAmountEqualstoLargestPassingSize()` from `RaffleCapacityTest.t.sol`, which belong to uncapped version.
+- Add invariant guard (`RaffleHandler.enter()` returns early when the player count reaches cap) and relative test (`test_HandlerRejectsEnter_WhenAmountEquelsMaxPlayers()`).
+
+Notes:
+- That the 73/74 pair is historical for the uncapped revision;
+- The pragma deviation (left at `^0.8.19`, build pinned by `foundry.toml`);
+
