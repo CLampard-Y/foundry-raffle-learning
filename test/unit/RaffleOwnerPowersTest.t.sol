@@ -7,6 +7,8 @@ import {Raffle} from "../../src/Raffle.sol";
 import {DeployRaffle} from "../../script/DeployRaffle.s.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
+import {VRFCoordinatorV2_5Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol";
+import {SubscriptionAPI} from "@chainlink/contracts/src/v0.8/vrf/dev/SubscriptionAPI.sol";
 
 contract RaffleOwnerPowersTest is Test {
     Raffle public raffle;
@@ -92,6 +94,39 @@ contract RaffleOwnerPowersTest is Test {
             )
         );
         raffle.rawFulfillRandomWords(requestId, new uint256[](1));
+    }
+
+    function test_PerformUpkeepRollsBack_WhenVrfRequestReverts() public {
+        // Arrange
+        // Make sure performupkeep is needed.
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+        vm.warp(block.timestamp + interval);
+        (bool upkeepNeeded,) = raffle.checkUpkeep("");
+        assertTrue(upkeepNeeded);
+
+        (,,, address ownerOfSubscription,) = VRFCoordinatorV2_5Mock(vrfCoordinator).getSubscription(subscriptionId);
+
+        vm.prank(ownerOfSubscription);
+        VRFCoordinatorV2_5Mock(vrfCoordinator).removeConsumer(subscriptionId, address(raffle));
+
+        assertEq(VRFCoordinatorV2_5Mock(vrfCoordinator).consumerIsAdded(subscriptionId, address(raffle)), false);
+
+        uint256 stateBeforePerformUpkeep = uint256(raffle.getRaffleState());
+        assertEq(stateBeforePerformUpkeep, uint256(Raffle.RaffleState.OPEN));
+        uint256 playersLengthBeforePerformUpkeep = raffle.getPlayersLength();
+        uint256 balanceBeforePerformUpkeep = address(raffle).balance;
+
+        // Act
+        vm.expectRevert(
+            abi.encodeWithSelector(SubscriptionAPI.InvalidConsumer.selector, subscriptionId, address(raffle))
+        );
+        raffle.performUpkeep("");
+
+        // Assert: Raffle snapshot value is unchanged.
+        assertEq(uint256(raffle.getRaffleState()), stateBeforePerformUpkeep);
+        assertEq(raffle.getPlayersLength(), playersLengthBeforePerformUpkeep);
+        assertEq(address(raffle).balance, balanceBeforePerformUpkeep);
     }
 }
 

@@ -632,3 +632,26 @@ Notes:
 - That the 73/74 pair is historical for the uncapped revision;
 - The pragma deviation (left at `^0.8.19`, build pinned by `foundry.toml`);
 
+## 10.19 ~
+### T3.2 - Privilege and request boundaries
+#### Problems
+- `performUpkeep` may (or may not, test needed) leave the raffle half-done when facing a failing VRF request.
+- Who may repoint the coordinator (test needed).
+- The owner can pick the winner.
+
+#### Changes
+- Add `RaffleOwnerPowersTest.t.sol` (4 tests, local mock):
+  - `test_PerformRollBack_WhenRequestReverts()`: Raffle removed as consumer → `performUpkeep` reverts `InvalidConsumer(subId, raffle)`; state stays `OPEN`, players and balance unchanged.
+  - `test_CoordinatorRemainUnchanged_WhenStrangerCalls()`: stranger → `OnlyOwnerOrCoordinator(have, owner, coordinator)`, coordinator unchanged.
+  - `test_SetCoordinatorReverts_WhenOwnerPassZeroAddress()`: owner + `address(0)` → `ZeroAddress`.
+  - `test_OwnerRepointsCoordinator_OldCoordinatorRejected()`: owner repoints (`CoordinatorSet` emitted), old coordinator → `OnlyCoordinatorCanFulfill(old, new)`.
+- RPC-free lane: 57 passed.
+
+Notes:
+- Rollback is guaranteed by the EVM; `expectRevert` with the exact error is what catches a swallowed request (`try/catch`). The state asserts only fail if the error is hidden (then stuck in `CALCULATING`).
+- `removeConsumer` checks the subscription owner, not the Raffle owner (same address locally only; see D2).
+- Mutations (primary agent, temporary copy, not an independent sign-off): skip `removeConsumer`, no warp, wrong error args, `try/catch` in `performUpkeep`, swapped/wrong caller in B–E → all fail as expected.
+- New coordinator + 0 players → `rawFulfillRandomWords` panics on `% 0`; Block 2 override needs ≥ 1 player.
+- Open: Block 2 (owner override), independent `protocol_test_engineer` check.
+
+
