@@ -128,5 +128,134 @@ contract RaffleOwnerPowersTest is Test {
         assertEq(raffle.getPlayersLength(), playersLengthBeforePerformUpkeep);
         assertEq(address(raffle).balance, balanceBeforePerformUpkeep);
     }
+
+    /**
+     * @dev Tests that the owner can repoint the coordinator to a controlled address
+     * and then fulfill the random words with a chosen winner index while `OPEN`.
+     * @dev N players, no warp, no `performUpkeep()`
+     */
+    function test_OwnerOverridePicksChosenWinner_WhenOpen() public {
+        // Arrange & Precondition check
+        uint256 N = 20;
+        _entersSpecificAmountDistinctPlayers(N);
+        // Interval not passed: upkeep is not needed, so no VRF request exists.
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
+        (bool upkeepNeeded,) = raffle.checkUpkeep("");
+        assertFalse(upkeepNeeded);
+
+        uint256 expectedWinnerIndex = (N + 2) * 2;
+        address expectedWinner = raffle.getPlayerByIndex(expectedWinnerIndex % N);
+        uint256 outstandingBefore = raffle.getTotalOutstandingClaims();
+        uint256 pot = address(raffle).balance - outstandingBefore;
+
+        address controlled = makeAddr("controlled coordinator");
+        _repointCoordinatorTo(controlled);
+
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = expectedWinnerIndex;
+
+        // Act
+        vm.prank(controlled);
+        raffle.rawFulfillRandomWords(0, randomWords);
+
+        // Assert
+        _assertFulfillExactly(expectedWinner, pot, outstandingBefore);
+
+        uint256 balanceBeforeWithdrawal = expectedWinner.balance;
+        vm.prank(expectedWinner);
+        raffle.withdrawWinnings();
+        _assertWithdrawExactly(expectedWinner, balanceBeforeWithdrawal, pot, outstandingBefore);
+    }
+
+    /**
+     * @dev Tests that the owner can repoint the coordinator to a controlled address
+     * and then fulfill the random words with a chosen winner index while `CALCULATING`.
+     * @dev N players, warp, real `performUpkeep()` (a VRF request is pending).
+     */
+    function test_OwnerOverridePicksChosenWinner_WhenCalculating() public {
+        // Arrange
+        uint256 N = 20;
+        _entersSpecificAmountDistinctPlayers(N);
+        vm.warp(block.timestamp + interval);
+        raffle.performUpkeep("");
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING));
+
+        uint256 expectedWinnerIndex = (N + 2) * 2;
+        address expectedWinner = raffle.getPlayerByIndex(expectedWinnerIndex % N);
+        uint256 outstandingBefore = raffle.getTotalOutstandingClaims();
+        uint256 pot = address(raffle).balance - outstandingBefore;
+
+        address controlled = makeAddr("controlled coordinator");
+        _repointCoordinatorTo(controlled);
+
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = expectedWinnerIndex;
+
+        // Act
+        vm.prank(controlled);
+        // The mock's pending request has ID 1, passing `0` still passes,
+        // which shows the request ID is ignored.
+        raffle.rawFulfillRandomWords(0, randomWords);
+
+        // Assert
+        _assertFulfillExactly(expectedWinner, pot, outstandingBefore);
+
+        uint256 balanceBeforeWithdrawal = expectedWinner.balance;
+        vm.prank(expectedWinner);
+        raffle.withdrawWinnings();
+        _assertWithdrawExactly(expectedWinner, balanceBeforeWithdrawal, pot, outstandingBefore);
+    }
+
+    // ============================================================
+    //                    helper functions
+    // ============================================================
+    /**
+     * @dev Enters specific amount of distinct players into the raffle
+     * @param amount - The amount of players to enter.
+     */
+    function _entersSpecificAmountDistinctPlayers(uint256 amount) internal {
+        for (uint256 i = 0; i < amount; i++) {
+            address player = makeAddr(string.concat("raffle actor", vm.toString(i)));
+            hoax(player, STARTING_USER_BALANCE);
+            raffle.enterRaffle{value: entranceFee}();
+        }
+        assertEq(raffle.getPlayersLength(), amount);
+    }
+
+    /**
+     * @dev Repoints the coordinator to a controlled address.
+     * @param controlled - The address to repoint the coordinator to.
+     */
+    function _repointCoordinatorTo(address controlled) internal {
+        address ownerOfRaffle = raffle.owner();
+        address controlledCoordinator = controlled;
+        vm.prank(ownerOfRaffle);
+        raffle.setCoordinator(controlledCoordinator);
+        assertEq(address(raffle.s_vrfCoordinator()), controlledCoordinator);
+    }
+
+    function _assertFulfillExactly(address expectedWinner, uint256 pot, uint256 outstandingBefore) internal {
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
+        assertEq(raffle.getPlayersLength(), 0);
+        assertEq(raffle.getRecentWinner(), expectedWinner);
+        assertEq(raffle.getClaimableWinnings(expectedWinner), pot);
+        assertEq(raffle.getTotalOutstandingClaims(), outstandingBefore + pot);
+    }
+
+    /**
+     * @dev Asserts that the raffle has been withdrawn exactly as expected.
+     * @dev Based on following assumptions:
+     * - The player has no claimable winnings before fulfillment.
+     */
+    function _assertWithdrawExactly(
+        address expectedWinner,
+        uint256 balanceBeforeWithdrawal,
+        uint256 pot,
+        uint256 outstandingBefore
+    ) internal {
+        assertEq(raffle.getClaimableWinnings(expectedWinner), 0);
+        assertEq(expectedWinner.balance, balanceBeforeWithdrawal + pot);
+        assertEq(raffle.getTotalOutstandingClaims(), outstandingBefore);
+    }
 }
 
