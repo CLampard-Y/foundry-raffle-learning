@@ -639,9 +639,9 @@ Notes:
 - Who may repoint the coordinator (test needed).
 - The owner can pick the winner.
 
-#### Changes
+#### Changes (block 1)
 - Add `RaffleOwnerPowersTest.t.sol` (4 tests, local mock):
-  - `test_PerformRollBack_WhenRequestReverts()`: Raffle removed as consumer → `performUpkeep` reverts `InvalidConsumer(subId, raffle)`; state stays `OPEN`, players and balance unchanged.
+  - `test_PerformUpkeepRollsBack_WhenVrfRequestReverts()`: Raffle removed as consumer → `performUpkeep` reverts `InvalidConsumer(subId, raffle)`; state stays `OPEN`, players and balance unchanged.
   - `test_CoordinatorRemainUnchanged_WhenStrangerCalls()`: stranger → `OnlyOwnerOrCoordinator(have, owner, coordinator)`, coordinator unchanged.
   - `test_SetCoordinatorReverts_WhenOwnerPassZeroAddress()`: owner + `address(0)` → `ZeroAddress`.
   - `test_OwnerRepointsCoordinator_OldCoordinatorRejected()`: owner repoints (`CoordinatorSet` emitted), old coordinator → `OnlyCoordinatorCanFulfill(old, new)`.
@@ -653,5 +653,34 @@ Notes:
 - Mutations (primary agent, temporary copy, not an independent sign-off): skip `removeConsumer`, no warp, wrong error args, `try/catch` in `performUpkeep`, swapped/wrong caller in B–E → all fail as expected.
 - New coordinator + 0 players → `rawFulfillRandomWords` panics on `% 0`; Block 2 override needs ≥ 1 player.
 - Open: Block 2 (owner override), independent `protocol_test_engineer` check.
+#### Changes (Block 2)
+Purpose: characterize, not fix — prove the owner can pick any winner (repoint coordinator to an owner-controlled address, submit a chosen word) with or without a pending request, and record the limits.
+- Add owner-override tests to `RaffleOwnerPowersTest.t.sol`:
+  - `test_OwnerOverridePicksChosenWinner_WhenCalculating()`: after a real `performUpkeep`, owner repoints the coordinator to a controlled address and calls `rawFulfillRandomWords` with a chosen word; the chosen player gets the whole pot (credited, then withdrawn), round resets to `OPEN`.
+  - `test_OwnerOverridePicksChosenWinner_WhenOpen()`: same while `OPEN` with no VRF request (`checkUpkeep` false).
+- RPC-free lane: 59 passed.
+
+Notes:
+- Accepted owner-trust assumption for this milestone (R5/R6): owner can pick any winner, in either state, with any request ID. `setCoordinator` is not `virtual`, so removing it needs an inheritance change.
+- It is also the only exit from a stuck `CALCULATING` round (R3). Not a fair recovery; never use it in the live demo.
+- Target index is non-zero and the word is ≥ N, so the test cannot pass with "always the first player".
+- Independent `protocol_test_engineer` check on the previous version (found index 0 and a misplaced OPEN precondition); fixes (index 4 / word 44, check after entries) confirmed by primary agent. Not a security review.
+- Limits: only owner/current coordinator (Block 1); needs ≥ 1 player (`% 0` panics); only the current pot (`balance − outstanding`), earlier claims untouched.
+
+- Committed: `d706f22`, `03b80e8` (Block 1), `27a9080` (Block 2).
+
+### T3.3 - Scoped re-review (10.26)
+- `protocol_security_auditor`, `src` at `f1b3250` (= HEAD), local mock: no Critical/High, no D1 regression.
+- Findings and decisions (10.26):
+  - F1 round-fill exclusion (Medium): one actor fills all 60 seats every round → **accepted** (R4 residual; size T4 budget/window for it).
+  - F2 stale request after repoint (Low) → T4 incident rule: never repoint back while a request is pending.
+  - F3 cap not tied to `callbackGasLimit` (Low) → T4 check: limit 500000 + measured build, else re-measure.
+- D1 cap independently verified by `protocol_test_engineer` (cold 425,607 also under `--isolate`; warm 123,907); gap: the value 60 is not pinned by a test.
+
+### T3 closure (10.26, `27a9080`)
+- T1 acceptance rerun: `fmt --check` ok, `build --sizes` ok, RPC-free 59 passed, capacity `--isolate` 5 passed, invariants 9 passed (0 reverts).
+- T3 closed locally; next: D2 + T4. Hosted CI not rerun for this revision.
+
+
 
 
