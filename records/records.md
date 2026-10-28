@@ -632,7 +632,7 @@ Notes:
 - That the 73/74 pair is historical for the uncapped revision;
 - The pragma deviation (left at `^0.8.19`, build pinned by `foundry.toml`);
 
-## 10.19 ~
+## 10.19 ~ 10.26
 ### T3.2 - Privilege and request boundaries
 #### Problems
 - `performUpkeep` may (or may not, test needed) leave the raffle half-done when facing a failing VRF request.
@@ -651,8 +651,7 @@ Notes:
 - Rollback is guaranteed by the EVM; `expectRevert` with the exact error is what catches a swallowed request (`try/catch`). The state asserts only fail if the error is hidden (then stuck in `CALCULATING`).
 - `removeConsumer` checks the subscription owner, not the Raffle owner (same address locally only; see D2).
 - Mutations (primary agent, temporary copy, not an independent sign-off): skip `removeConsumer`, no warp, wrong error args, `try/catch` in `performUpkeep`, swapped/wrong caller in B–E → all fail as expected.
-- New coordinator + 0 players → `rawFulfillRandomWords` panics on `% 0`; Block 2 override needs ≥ 1 player.
-- Open: Block 2 (owner override), independent `protocol_test_engineer` check.
+
 #### Changes (Block 2)
 Purpose: characterize, not fix — prove the owner can pick any winner (repoint coordinator to an owner-controlled address, submit a chosen word) with or without a pending request, and record the limits.
 - Add owner-override tests to `RaffleOwnerPowersTest.t.sol`:
@@ -663,7 +662,7 @@ Purpose: characterize, not fix — prove the owner can pick any winner (repoint 
 Notes:
 - Accepted owner-trust assumption for this milestone (R5/R6): owner can pick any winner, in either state, with any request ID. `setCoordinator` is not `virtual`, so removing it needs an inheritance change.
 - It is also the only exit from a stuck `CALCULATING` round (R3). Not a fair recovery; never use it in the live demo.
-- Target index is non-zero and the word is ≥ N, so the test cannot pass with "always the first player".
+- Target index is non-zero and the word is ≥ N.
 - Independent `protocol_test_engineer` check on the previous version (found index 0 and a misplaced OPEN precondition); fixes (index 4 / word 44, check after entries) confirmed by primary agent. Not a security review.
 - Limits: only owner/current coordinator (Block 1); needs ≥ 1 player (`% 0` panics); only the current pot (`balance − outstanding`), earlier claims untouched.
 
@@ -680,6 +679,42 @@ Notes:
 ### T3 closure (10.26, `27a9080`)
 - T1 acceptance rerun: `fmt --check` ok, `build --sizes` ok, RPC-free 59 passed, capacity `--isolate` 5 passed, invariants 9 passed (0 reverts).
 - T3 closed locally; next: D2 + T4. Hosted CI not rerun for this revision.
+
+## 10.27 ~
+### T4 - Refresh deployment readiness
+T4 answers one question before public deploy (T5):
+> If I broadcast this exact revision, with this config and this key, will the chain end up where I expect? And do I know what to do if it doesn't?
+> What T4 produces is not deployment. It produces a reviewed config, a passing **non-broadcast** simulation and a short runbook.
+
+Problems:
+- **Dangerous config path**
+  - `Deploy` creates a subscription `subscriptionId = 0`, the live ID is `keccak256(msg.sender, blockhash(block.number - 1), coordinator, nonce)`.
+  - Outcome: The real create lands in a later block and gets a different ID, resulting an orphan subscription and a Raffle with a permanently wrong `i_subscriptionId`.
+- **Silent success**
+  - The script never checks its own result.
+  - Outcome: A Sepolia simulation can "succeed" while the owner, subscription or consumer is wrong.
+- **Assumptions that expire**
+  - `MAX_PLAYERS = 60` is valid only for `callbackGasLimit = 500000` on the measured build.
+  - Outcome: If someone changes the gas limit, the cap stops protecting liveness.
+- **No operating procedure**
+  - Nothing is written for a stalled fulfillment, the F2 rule, teardown, key handling or preserving evidence
+  - Outcome: During an incident you improvise. The owner override is tempting but would invalidate the demo.
+  
+Solution: 
+- Assumption (can be checked by code): put into code (fails automatically while stimulating).
+- On-chain facts: reads through `cast call` and recorded with date and block, plus the re-pinned fork test.
+- Human decisions: records a short written runbook.
+
+#### Block 1 
+Decisions: D2 = new dedicated subscription, same owner `0x1B2b…` (isolates budget and pending requests, not the key); key stays in env (testnet-only funds).
+
+Task 1.1 (`1a80ba5`): `getConfigByChainId` reverts `HelperConfig__MissingSubscriptionId(chainId)` for a configured (non-31337) chain with ID 0, so DeployRaffle can no longer create a subscription in-script on a live chain. `CreateSubscription.run()` still can (it ignores the config ID) and logs the *simulated* ID: take the D2 ID from the receipt/UI, never from that log. Tested via a test-only `HelperConfigHarness` (zero → exact revert; non-zero → returned).
+
+Task 1.2: DeployRaffle checks subscription owner == signer **before** broadcast, then Raffle coordinator, subscription ID, callback limit == `MEASURED_CALLBACK_GAS_LIMIT` (F3), owner, and consumer membership (re-read after `addConsumer`).
+- Check 2026-10-28 (primary agent, scratch-copy mutations; not independent): RPC-free 61 passed, fmt clean, `src`/`foundry.toml` unchanged since `f1b3250`. Skip `addConsumer` → `ConsumerNotRegistered`; limit 400000 (config or `MEASURED`) → `CallbackGasLimitNotEqual`; foreign subscription owner → `OwnerOfSubscriptionIsNotExpected` with no Raffle CREATE (without the pre-check: `MustBeSubOwner` after CREATE = R9); foreign deployer → `OwnerOfRaffleIsNotExpected`; `src` subId+1 → `SubscriptionIsNotExpected`.
+- Independent `protocol_test_engineer` (2026-10-28): 1.1 and 1.2 **verified**, no code defect; script runner also fails loudly; scratch fake-coordinator on chain 11155111 confirms the pre-check runs before any CREATE.
+- Limits: no committed negative tests (checks are inline); deleting the coordinator/subId/owner/limit checks, or comparing the limit to the config instead of `MEASURED`, survives the suite (needs a script seam). Checks cannot tell the old from the new subscription (same owner) and do not check balance → Block 2.
+
 
 
 
