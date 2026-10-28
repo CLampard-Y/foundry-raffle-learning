@@ -234,7 +234,7 @@ contract RaffleOwnerPowersTest is Test {
         assertEq(address(raffle.s_vrfCoordinator()), controlledCoordinator);
     }
 
-    function _assertFulfillExactly(address expectedWinner, uint256 pot, uint256 outstandingBefore) internal {
+    function _assertFulfillExactly(address expectedWinner, uint256 pot, uint256 outstandingBefore) internal view {
         assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
         assertEq(raffle.getPlayersLength(), 0);
         assertEq(raffle.getRecentWinner(), expectedWinner);
@@ -252,7 +252,7 @@ contract RaffleOwnerPowersTest is Test {
         uint256 balanceBeforeWithdrawal,
         uint256 pot,
         uint256 outstandingBefore
-    ) internal {
+    ) internal view {
         assertEq(raffle.getClaimableWinnings(expectedWinner), 0);
         assertEq(expectedWinner.balance, balanceBeforeWithdrawal + pot);
         assertEq(raffle.getTotalOutstandingClaims(), outstandingBefore);
