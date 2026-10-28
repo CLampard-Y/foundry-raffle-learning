@@ -5,6 +5,12 @@ pragma solidity ^0.8.19;
 import {Test} from "forge-std/Test.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 
+contract HelperConfigHarness is HelperConfig {
+    function setNetworkConfig(uint256 chainId, NetworkConfig memory config) external {
+        networkConfigs[chainId] = config;
+    }
+}
+
 contract HelperConfigTest is Test {
     address private constant SEPOLIA_VRF_COORDINATOR = 0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B;
     bytes32 private constant SEPOLIA_GAS_LANE = 0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae;
@@ -60,5 +66,37 @@ contract HelperConfigTest is Test {
         vm.setEnv("SEPOLIA_PRIVATE_KEY", vm.toString(invalidDeployerKey));
         vm.expectRevert(HelperConfig.HelperConfig__InvalidDeployerKey.selector);
         helperConfig.getDeployerKey();
+    }
+
+    function test_HelperConfigHarnessWorks_setNetworkConfig() public {
+        // Arrange
+        uint256 chainId = 11155111;
+        uint256 expectedSubscriptionId = 1;
+
+        HelperConfigHarness helperConfigHarness = new HelperConfigHarness();
+        HelperConfig.NetworkConfig memory config = helperConfigHarness.getSepoliaEthConfig();
+
+        // Act
+        config.subscriptionId = expectedSubscriptionId;
+        helperConfigHarness.setNetworkConfig(chainId, config);
+
+        // Assert
+        HelperConfig.NetworkConfig memory actualConfig = helperConfigHarness.getConfigByChainId(chainId);
+        assertEq(actualConfig.subscriptionId, expectedSubscriptionId);
+    }
+
+    function test_GetConfigByChainIdReverts_WhenOnChainSubscriptionIsZero() public {
+        // Arrange
+        uint256 chainId = 11155111;
+        uint256 zeroSubscriptionId = 0;
+
+        HelperConfigHarness helperConfigHarness = new HelperConfigHarness();
+        HelperConfig.NetworkConfig memory config = helperConfigHarness.getSepoliaEthConfig();
+        config.subscriptionId = zeroSubscriptionId;
+        helperConfigHarness.setNetworkConfig(chainId, config);
+
+        // Act
+        vm.expectRevert(abi.encodeWithSelector(HelperConfig.HelperConfig__MissingSubscriptionId.selector, chainId));
+        helperConfigHarness.getConfigByChainId(chainId);
     }
 }

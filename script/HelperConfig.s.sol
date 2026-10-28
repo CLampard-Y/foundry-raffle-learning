@@ -23,6 +23,7 @@ abstract contract CodeConstants {
 contract HelperConfig is Script, CodeConstants {
     error HelperConfig__InvalidChainId();
     error HelperConfig__InvalidDeployerKey();
+    error HelperConfig__MissingSubscriptionId(uint256 chainId);
 
     struct NetworkConfig {
         uint256 entranceFee;
@@ -74,6 +75,10 @@ contract HelperConfig is Script, CodeConstants {
 
     function getConfigByChainId(uint256 chainId) public returns (NetworkConfig memory) {
         if (networkConfigs[chainId].vrfCoordinator != address(0)) {
+            if (networkConfigs[chainId].subscriptionId == 0) {
+                revert HelperConfig__MissingSubscriptionId(chainId);
+            }
+
             return networkConfigs[chainId];
         } else if (chainId == LOCAL_CHAIN_ID) {
             return getOrCreateAnvilEthConfig();
