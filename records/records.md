@@ -714,7 +714,170 @@ Task 1.2: DeployRaffle checks subscription owner == signer **before** broadcast,
 - Check 2026-10-28 (primary agent, scratch-copy mutations; not independent): RPC-free 61 passed, fmt clean, `src`/`foundry.toml` unchanged since `f1b3250`. Skip `addConsumer` → `ConsumerNotRegistered`; limit 400000 (config or `MEASURED`) → `CallbackGasLimitNotEqual`; foreign subscription owner → `OwnerOfSubscriptionIsNotExpected` with no Raffle CREATE (without the pre-check: `MustBeSubOwner` after CREATE = R9); foreign deployer → `OwnerOfRaffleIsNotExpected`; `src` subId+1 → `SubscriptionIsNotExpected`.
 - Independent `protocol_test_engineer` (2026-10-28): 1.1 and 1.2 **verified**, no code defect; script runner also fails loudly; scratch fake-coordinator on chain 11155111 confirms the pre-check runs before any CREATE.
 - Limits: no committed negative tests (checks are inline); deleting the coordinator/subId/owner/limit checks, or comparing the limit to the config instead of `MEASURED`, survives the suite (needs a script seam). Checks cannot tell the old from the new subscription (same owner) and do not check balance → Block 2.
+#### Block 2
+##### Task 2.1
+Read the current values directly from the chain and check that they still fit what the Raffle does: confirmations, callback gas, gas lane, pay in LINK.
+```bash
+cd ~/code/solidity/foundry-raffle-learning
+source .env
 
+COORD=0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B
+LINK=0x779877A7B0D9E8603169DdbD7836e478b4624789
+LANE=0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae
+OLD_SUB=38935307025656909513953714257720199287951776187933259851240202794364574788117
+
+B=$(cast block-number --rpc-url "$SEPOLIA_RPC_URL"); echo "block B = $B"
+date -u
+
+// Output
+//B=$(cast block-number --rpc-url "$SEPOLIA_RPC_URL"); echo "block B = $B"
+//date -u
+//block B = 12048548
+//Mon Nov  2 01:49:13 PM UTC 2026
+
+
+// ==================
+// confirm the chain and that the contracts exist
+// ==================
+cast chain-id --rpc-url "$SEPOLIA_RPC_URL"
+cast code $COORD --block $B --rpc-url "$SEPOLIA_RPC_URL" | wc -c
+cast code $LINK  --block $B --rpc-url "$SEPOLIA_RPC_URL" | wc -c
+
+// Output
+//11155111
+//48191
+//8567
+
+// =================
+// the coordinator s global config
+// =================
+// Taken from `SubscriptionAPI.sol:110-146`.
+cast call $COORD "s_config()(uint16,uint32,bool,uint32,uint32,uint32,uint32,uint8,uint8)" --block $B --rpc-url "$SEPOLIA_RPC_URL"
+
+// Output
+//3
+//2500000 [2.5e6]
+//false
+//172800 [1.728e5]
+//26000 [2.6e4]
+//0
+//0
+//24
+//20
+
+// ============
+// the gas lane
+// ============
+// The output has two lines: `exists` and `maxGas`
+// `exists` shoule be `true`, meaning the key hash in HelperConfig is still registered on the coordinator.
+// `maxGas` is the lane s highest gas price in wei (`cast from-wei <maxGas> gwei`)
+cast call $COORD "s_provingKeys(bytes32)(bool,uint64)" $LANE \
+  --block $B --rpc-url "$SEPOLIA_RPC_URL"
+
+// Output
+//true
+//500000000000 [5e11]
+
+// =================
+// the LINK/ETH price
+// =================
+// latestRoundData returns 5 lines: 
+//  1. `roundId`
+//  2. `answer`: how many wei one LINK is worth.
+//  3. `startedAt`
+//  4. `updatedAt`: when the price was last updated.
+//  5. `answeredInRound`
+FEED=$(cast call $COORD "LINK_NATIVE_FEED()(address)" --block $B --rpc-url "$SEPOLIA_RPC_URL"); echo "feed = $FEED"
+cast call $FEED "latestRoundData()(uint80,int256,uint256,uint256,uint80)" --block $B --rpc-url "$SEPOLIA_RPC_URL"
+cast call $COORD "s_fallbackWeiPerUnitLink()(int256)" --block $B --rpc-url "$SEPOLIA_RPC_URL"
+cast block $B --field timestamp --rpc-url "$SEPOLIA_RPC_URL"
+
+// Output
+//feed = 0x42585eD362B3f1BCa95c640FdFf35Ef899212734
+//36893488147419128233 [3.689e19]
+//5014975132784257 [5.014e15]
+//1794233263 [1.794e9]
+//1794233280 [1.794e9]
+//36893488147419128233 [3.689e19]
+//5347462396894712 [5.347e15]
+//1794233688
+
+// If price is stale, 
+
+
+// =================
+// the old subscription, for comparison
+// =================
+// getSubscription returns 5 items: balance, nativeBalance, reqCount, owner, consumers.
+cast call $COORD "getSubscription(uint256)(uint96,uint96,uint64,address,address[])" $OLD_SUB \
+  --block $B --rpc-url "$SEPOLIA_RPC_URL"
+cast call $COORD "pendingRequestExists(uint256)(bool)" $OLD_SUB \
+  --block $B --rpc-url "$SEPOLIA_RPC_URL"
+
+// Output
+//18000000000000000000 [1.8e19]
+//0
+//0
+//0x1B2bBE13FFd0c4f2654D401d102C1CdC749Dea41
+//[0x8a23ca647D6EDCbf28b335Aa2E564E2165DFf410, 0x014eC4E62841ccdCD65658aa4f479f6AfD3b00d6]
+//true
+```
+
+**One copy-paste block**
+```bash
+cd ~/code/solidity/foundry-raffle-learning && source .env
+COORD=0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B
+LINK=0x779877A7B0D9E8603169DdbD7836e478b4624789
+LANE=0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae
+OLD_SUB=38935307025656909513953714257720199287951776187933259851240202794364574788117
+R=(--block "$(cast block-number --rpc-url "$SEPOLIA_RPC_URL")" --rpc-url "$SEPOLIA_RPC_URL")
+echo "B=${R[1]}  local=$(date -u)  block_ts=$(cast block "${R[1]}" --field timestamp --rpc-url "$SEPOLIA_RPC_URL")"
+cast chain-id --rpc-url "$SEPOLIA_RPC_URL"
+echo "code: $(cast code $COORD "${R[@]}" | wc -c) $(cast code $LINK "${R[@]}" | wc -c)"
+echo "--- s_config";      cast call $COORD "s_config()(uint16,uint32,bool,uint32,uint32,uint32,uint32,uint8,uint8)" "${R[@]}"
+echo "--- lane";          cast call $COORD "s_provingKeys(bytes32)(bool,uint64)" $LANE "${R[@]}"
+FEED=$(cast call $COORD "LINK_NATIVE_FEED()(address)" "${R[@]}"); echo "--- feed $FEED"
+cast call $FEED "latestRoundData()(uint80,int256,uint256,uint256,uint80)" "${R[@]}"
+echo "--- fallback";      cast call $COORD "s_fallbackWeiPerUnitLink()(int256)" "${R[@]}"
+echo "--- old sub";       cast call $COORD "getSubscription(uint256)(uint96,uint96,uint64,address,address[])" $OLD_SUB "${R[@]}"
+echo "--- old pending";   cast call $COORD "pendingRequestExists(uint256)(bool)" $OLD_SUB "${R[@]}"
+
+
+/* Output
+B=12105544  local=Tue Nov 10 03:32:54 PM UTC 2026  block_ts=1794324768
+11155111
+code: 48191 8567
+--- s_config
+3
+2500000 [2.5e6]
+false
+172800 [1.728e5]
+26000 [2.6e4]
+0
+0
+24
+20
+--- lane
+true
+500000000000 [5e11]
+--- feed 0x42585eD362B3f1BCa95c640FdFf35Ef899212734
+36893488147419128258 [3.689e19]
+5058057176613119 [5.058e15]
+1794324020 [1.794e9]
+1794324036 [1.794e9]
+36893488147419128258 [3.689e19]
+--- fallback
+5347462396894712 [5.347e15]
+--- old sub
+18000000000000000000 [1.8e19]
+0
+0
+0x1B2bBE13FFd0c4f2654D401d102C1CdC749Dea41
+[0x8a23ca647D6EDCbf28b335Aa2E564E2165DFf410, 0x014eC4E62841ccdCD65658aa4f479f6AfD3b00d6]
+--- old pending
+true
+*/
+```
 
 
 
